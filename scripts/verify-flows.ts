@@ -176,8 +176,10 @@ async function verifySnakeDraft() {
   state = await applyLobbyAction(host.code, { token: host.token, expectedVersion: state.stateVersion, action: "start" });
   const participants = state.activeMatch?.participantIds ?? [];
   assert.equal(participants.length, 3);
+  assert.deepEqual(state.activeMatch?.runs.map((run) => run.playerId), participants);
 
   const observedOrder: string[] = [];
+  const progressOrder = [...participants];
   const firstMatch = state.activeMatch;
   assert.ok(firstMatch, "snake match exists");
   assert.ok(firstMatch.currentSpin, "initial snake spin exists");
@@ -192,6 +194,7 @@ async function verifySnakeDraft() {
     assert.ok(firstMatch.currentTurnPlayerId, "current drafter exists");
     observedOrder.push(firstMatch.currentTurnPlayerId);
     state = await pickForCurrentSnakeDrafter(host.code, tokens, state);
+    assert.deepEqual(state.activeMatch?.runs.map((run) => run.playerId), progressOrder, "lobby progress order stays stable after current turn changes");
     assert.deepEqual(state.activeMatch?.currentSpin, firstSpin, "snake spin stays fixed until each player drafts from it");
   } finally {
     await restoreTeamEra(firstSpin, removedTeamEra.rows[0].count);

@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
@@ -22,4 +22,14 @@ export function pickRandom<T>(items: T[]) {
   const bytes = randomBytes(4);
   const value = bytes.readUInt32BE(0);
   return items[value % items.length];
+}
+
+export function shuffleBySeed<T>(items: T[], seed: string) {
+  return items
+    .map((item, index) => ({
+      item,
+      key: createHash("sha256").update(`${seed}:${index}`).digest("hex"),
+    }))
+    .sort((a, b) => a.key.localeCompare(b.key))
+    .map(({ item }) => item);
 }

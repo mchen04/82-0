@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, Copy, Crown, Play, Shuffle, Swords, Trophy } from "lucide-react";
 import { Header } from "./home-app";
-import { playerStatDetails } from "@/lib/player-details";
 import { formatStat, HARD_CAP_AMOUNT, SOFT_CAP_AMOUNT } from "@/lib/rules";
 import { Court, MobileLineup, Opponents, Standings } from "./lobby-lineup";
 import {
@@ -476,7 +475,7 @@ function BoardPanel({
     return [...filtered].sort((a, b) => value(b) - value(a) || a.player.localeCompare(b.player));
   }, [match?.candidates, position, query, sort]);
 
-  if (ownFinal) {
+  if (ownFinal && (state?.status === "results" || match?.status === "complete")) {
     return <ResultPanel run={viewerRun} />;
   }
 
@@ -544,6 +543,13 @@ function BoardPanel({
             </div>
           ) : null}
         </>
+      ) : ownFinal ? (
+        <div className="empty-state">
+          <div>
+            <h2>Lineup locked.</h2>
+            <p>Waiting for the rest of the lobby to finish.</p>
+          </div>
+        </div>
       ) : (
         <div className="empty-state">
           <div>
@@ -557,9 +563,8 @@ function BoardPanel({
 }
 
 function CandidateCard({ candidate, active, disabled, onSelect }: { candidate: Candidate; active: boolean; disabled: boolean; onSelect: () => void }) {
-  const details = playerStatDetails(candidate);
   return (
-    <button className={`candidate-button ${active ? "active" : ""}`} type="button" disabled={disabled} onClick={onSelect} data-testid="player-card" data-player-id={candidate.id} data-tooltip={details} title={details}>
+    <button className={`candidate-button ${active ? "active" : ""}`} type="button" disabled={disabled} onClick={onSelect} data-testid="player-card" data-player-id={candidate.id}>
       <div>
         <div className="candidate-top">
           <p className="candidate-name">{candidate.player}</p>

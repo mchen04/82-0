@@ -489,36 +489,6 @@ a {
   text-align: left;
 }
 
-.candidate-button[data-tooltip]::after {
-  position: absolute;
-  inset-inline: 0.65rem;
-  bottom: 0.65rem;
-  z-index: 10;
-  padding: 0.55rem 0.65rem;
-  border: 2px solid var(--ink);
-  background: var(--chalk);
-  color: var(--ink);
-  box-shadow: 3px 3px 0 var(--ink);
-  content: attr(data-tooltip);
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 0.66rem;
-  font-weight: 900;
-  line-height: 1.25;
-  opacity: 0;
-  pointer-events: none;
-  text-align: left;
-  text-transform: none;
-  transform: translateY(0.25rem);
-  transition: opacity 0.12s, transform 0.12s;
-  white-space: pre-line;
-}
-
-.candidate-button[data-tooltip]:hover::after,
-.candidate-button[data-tooltip]:focus-visible::after {
-  opacity: 1;
-  transform: translateY(0);
-}
-
 .candidate-button.active {
   border-color: var(--orange);
   background: #fff7ed;
@@ -596,7 +566,7 @@ a {
   width: 100%;
   max-width: 100%;
   min-height: 380px;
-  overflow: hidden;
+  overflow: visible;
   aspect-ratio: 1.05 / 1;
   border: 2px solid var(--ink);
   background: #111827 url("/brand/court-home.webp") center / cover;
@@ -704,6 +674,12 @@ a {
   box-shadow: 0 0 0 4px rgba(233, 87, 43, 0.32), 4px 4px 0 rgba(0, 0, 0, 0.45);
 }
 
+.court-slot:hover,
+.court-slot:focus,
+.court-slot:focus-visible {
+  z-index: 100;
+}
+
 .court-initials {
   position: relative;
   z-index: 2;
@@ -729,7 +705,7 @@ a {
   position: absolute;
   bottom: calc(100% + 0.45rem);
   left: 50%;
-  z-index: 80;
+  z-index: 1000;
   width: max-content;
   max-width: min(22rem, calc(100vw - 2rem));
   padding: 0.45rem 0.55rem;
