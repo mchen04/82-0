@@ -654,6 +654,7 @@ a {
 
 .court-slot.filled {
   color: var(--chalk);
+  cursor: default;
 }
 
 .court-initials {
@@ -671,6 +672,46 @@ a {
   font-weight: 900;
   line-height: 1;
   box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.45);
+}
+
+.initials-tooltip {
+  position: relative;
+}
+
+.initials-tooltip::after {
+  position: absolute;
+  bottom: calc(100% + 0.45rem);
+  left: 50%;
+  z-index: 80;
+  width: max-content;
+  max-width: min(16rem, calc(100vw - 2rem));
+  padding: 0.45rem 0.55rem;
+  border: 2px solid var(--ink);
+  background: var(--chalk);
+  color: var(--ink);
+  box-shadow: 3px 3px 0 var(--ink);
+  content: attr(data-tooltip);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.68rem;
+  font-weight: 900;
+  line-height: 1.2;
+  opacity: 0;
+  pointer-events: none;
+  text-align: center;
+  text-transform: none;
+  transform: translate(-50%, 0.25rem);
+  transition: opacity 0.12s, transform 0.12s;
+  white-space: normal;
+}
+
+.initials-tooltip:hover::after,
+.initials-tooltip:focus-visible::after,
+.court-slot[data-tooltip]:hover .initials-tooltip::after,
+.court-slot[data-tooltip]:focus-visible .initials-tooltip::after,
+.mobile-slot:hover .initials-tooltip::after,
+.mobile-slot:focus-visible .initials-tooltip::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
 }
 
 .court-label {
@@ -723,6 +764,7 @@ a {
   border-style: solid;
   border-color: var(--ink);
   background: var(--ink);
+  cursor: default;
 }
 
 .mobile-slot strong {
@@ -730,6 +772,11 @@ a {
   font-size: 1.55rem;
   font-weight: 900;
   line-height: 1;
+}
+
+.mobile-initials {
+  display: grid;
+  place-items: center;
 }
 
 .result-card {
