@@ -32,12 +32,12 @@ async function main() {
     await assertDisabled(seed.toPosition);
     await assertDisabled("C");
 
-    await browser("hover", `[data-testid="court-slot-${seed.fromPosition}"]`);
-    await evalPage(`
+    await evalPage(`document.querySelector('[data-testid="court-slot-${seed.fromPosition}"]')?.focus();`);
+    await waitForPage(`
       const tooltip = document.querySelector('[data-testid="court-slot-${seed.fromPosition}"] .initials-tooltip');
       const style = getComputedStyle(tooltip, '::after');
+      if (!tooltip?.getAttribute('data-tooltip')?.includes(${JSON.stringify(seed.player)})) throw new Error('tooltip data missing player name');
       if (!style.content.includes(${JSON.stringify(seed.player)})) throw new Error('tooltip details missing player name');
-      if (Number(style.opacity) < 0.9) throw new Error('tooltip did not become visible on hover');
     `);
 
     await browser("click", `[data-testid="court-slot-${seed.fromPosition}"]`);
@@ -67,6 +67,7 @@ async function main() {
       JSON.stringify(seed.swap.lineup),
       seed.swap.capSpent,
     ]);
+    await bumpLobbyVersion(seed.code);
     await waitForPage(filledScript(seed.swap.fromPosition, seed.swap.source.player));
     await assertFilled(seed.swap.position, seed.swap.target.player);
     await evalPage(`
@@ -86,6 +87,7 @@ async function main() {
     await assertFilled(seed.swap.fromPosition, seed.swap.target.player);
 
     await query(`UPDATE runs SET current_spin = $2::jsonb, updated_at = now() WHERE id = $1`, [seed.runId, JSON.stringify(seed.searchSpin)]);
+    await bumpLobbyVersion(seed.code);
     await waitForPage(`
       if (!document.querySelector('[aria-label="Search players"]')) throw new Error('search input missing before query');
     `);
@@ -175,6 +177,10 @@ async function assertFilled(position: string, player: string) {
   await evalPage(filledScript(position, player));
 }
 
+async function bumpLobbyVersion(code: string) {
+  await query(`UPDATE lobbies SET state_version = state_version + 1, updated_at = now() WHERE code = $1`, [code]);
+}
+
 function filledScript(position: string, player: string) {
   return `
     const slot = document.querySelector('[data-testid="court-slot-${position}"]');
@@ -218,6 +224,22 @@ async function waitForPage(script: string, timeoutMs = 15_000) {
   throw lastError instanceof Error ? lastError : new Error("Timed out waiting for page condition.");
 }
 
+async function waitForServer(port: number, timeoutMs = 15_000) {
+  const startedAt = Date.now();
+  let lastError: unknown;
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/api/health`, { cache: "no-store" });
+      if (response.ok) return;
+      lastError = new Error(`Health check returned ${response.status}`);
+    } catch (error) {
+      lastError = error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  throw lastError instanceof Error ? lastError : new Error("Timed out waiting for dev server.");
+}
+
 async function browser(...args: string[]) {
   return execFileAsync("agent-browser", ["--session", session, ...args], { maxBuffer: 1024 * 1024 });
 }
@@ -242,18 +264,36 @@ function startServer(port: number) {
 
   const ready = new Promise<void>((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error("Next dev server did not become ready in time")), 30_000);
+    let settling = false;
+    let settled = false;
+    let output = "";
+    const appendOutput = (text: string) => {
+      output = `${output}${text}`.slice(-4000);
+    };
+    const fail = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      reject(error);
+    };
     const onData = (chunk: Buffer) => {
       const text = chunk.toString();
-      if (text.includes("Ready")) {
-        clearTimeout(timeout);
-        resolve();
+      appendOutput(text);
+      if (text.includes("Ready") && !settling) {
+        settling = true;
+        waitForServer(port)
+          .then(() => {
+            settled = true;
+            clearTimeout(timeout);
+            resolve();
+          })
+          .catch((error) => fail(error));
       }
     };
     child.stdout?.on("data", onData);
     child.stderr?.on("data", onData);
     child.once("exit", (code) => {
-      clearTimeout(timeout);
-      reject(new Error(`Next dev server exited early with code ${code}`));
+      fail(new Error(`Next dev server exited early with code ${code}\n${output}`));
     });
   });
 

@@ -10,6 +10,7 @@
     "test": "tsx --test tests/*.test.ts",
     "db:setup": "tsx scripts/setup-db.ts",
     "db:reset": "tsx scripts/reset-db.ts",
+    "db:cleanup": "tsx scripts/cleanup-lobbies.ts",
     "verify:flows": "tsx scripts/verify-flows.ts",
     "verify:lineup-ui": "tsx scripts/verify-lineup-ui.ts",
     "verify": "npm run typecheck && npm test && npm run verify:flows && npm run verify:lineup-ui && npm run build"

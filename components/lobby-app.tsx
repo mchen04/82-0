@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Check, Copy, Crown, Play, RotateCcw, Shuffle, Swords, Trophy } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Check, Copy, Crown, Play, Shuffle, Swords, Trophy } from "lucide-react";
 import { Header } from "./home-app";
-import { formatStat, HARD_CAP_AMOUNT, initials, SOFT_CAP_AMOUNT } from "@/lib/rules";
+import { formatStat, HARD_CAP_AMOUNT, SOFT_CAP_AMOUNT } from "@/lib/rules";
+import { Court, Events, MobileLineup, Opponents, Standings } from "./lobby-lineup";
 import {
   POSITIONS,
   type Candidate,
@@ -27,10 +28,6 @@ function playerName(state: PublicLobbyState | null, id: string | null | undefine
   return state.players.find((player) => player.id === id)?.name ?? "Unknown";
 }
 
-function slotDetails(slot: LineupSlot) {
-  return `${slot.player} · ${slot.team} · ${slot.era} · $${slot.cost}`;
-}
-
 export function LobbyApp({ code }: { code: string }) {
   const [token, setToken] = useState<string | null>(null);
   const [name, setName] = useState("Friend");
@@ -40,28 +37,55 @@ export function LobbyApp({ code }: { code: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  const stateVersionRef = useRef<number | null>(null);
+  const stateTokenRef = useRef<string | null>(null);
 
   useEffect(() => {
     const saved = localStorage.getItem(tokenKey(code));
     if (saved) setToken(saved);
   }, [code]);
 
-  const load = useCallback(async () => {
-    const url = token ? `/api/lobbies/${code}?token=${encodeURIComponent(token)}` : `/api/lobbies/${code}`;
+  const fetchLobbyState = useCallback(async (sinceVersion?: number | null) => {
+    const params = new URLSearchParams();
+    if (token) params.set("token", token);
+    if (typeof sinceVersion === "number") params.set("since", String(sinceVersion));
+    const query = params.toString();
+    const url = query ? `/api/lobbies/${code}?${query}` : `/api/lobbies/${code}`;
     const response = await fetch(url, { cache: "no-store" });
+    if (response.status === 204) return null;
     const data = await response.json();
     if (!response.ok) throw new Error(data.message ?? "Could not load lobby.");
-    setState(data);
+    return data as PublicLobbyState;
   }, [code, token]);
+
+  const rememberState = useCallback((nextState: PublicLobbyState) => {
+    stateVersionRef.current = nextState.stateVersion;
+    stateTokenRef.current = token ?? null;
+    setState(nextState);
+  }, [token]);
+
+  const load = useCallback(async () => {
+    const nextState = await fetchLobbyState();
+    if (nextState) rememberState(nextState);
+  }, [fetchLobbyState, rememberState]);
 
   useEffect(() => {
     let stopped = false;
+    let inFlight = false;
     async function tick() {
+      if (inFlight) return;
+      inFlight = true;
       try {
-        await load();
-        if (!stopped) setError("");
+        const sinceVersion = stateTokenRef.current === (token ?? null) ? stateVersionRef.current : null;
+        const nextState = await fetchLobbyState(sinceVersion);
+        if (!stopped) {
+          if (nextState) rememberState(nextState);
+          setError("");
+        }
       } catch (err) {
         if (!stopped) setError(err instanceof Error ? err.message : "Could not load lobby.");
+      } finally {
+        inFlight = false;
       }
     }
     tick();
@@ -70,7 +94,7 @@ export function LobbyApp({ code }: { code: string }) {
       stopped = true;
       window.clearInterval(interval);
     };
-  }, [load]);
+  }, [fetchLobbyState, rememberState, token]);
 
   const viewerRun = useMemo(() => {
     const match = state?.activeMatch;
@@ -157,7 +181,7 @@ export function LobbyApp({ code }: { code: string }) {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message ?? "Action failed.");
-      setState(data);
+      rememberState(data);
       setSelected(null);
       setMovingPosition(null);
     } catch (err) {
@@ -604,238 +628,6 @@ function ResultPanel({ run }: { run: PublicRun | null }) {
           </div>
         ))}
       </div>
-    </section>
-  );
-}
-
-type LineupPickerProps = {
-  lineup: Partial<Record<Position, LineupSlot>>;
-  selected: Candidate | null;
-  movingPosition: Position | null;
-  canPick: boolean;
-  canMove: boolean;
-  onPick: (position: Position) => void;
-  onStartMove: (position: Position) => void;
-  onMove: (fromPosition: Position, position: Position) => void;
-};
-
-function canMoveTo(lineup: Partial<Record<Position, LineupSlot>>, fromPosition: Position, position: Position) {
-  if (fromPosition === position) return false;
-  const slot = lineup[fromPosition];
-  if (!slot?.positions.includes(position)) return false;
-  const targetSlot = lineup[position];
-  return !targetSlot || targetSlot.positions.includes(fromPosition);
-}
-
-function canMoveFrom(lineup: Partial<Record<Position, LineupSlot>>, position: Position) {
-  return POSITIONS.some((target) => canMoveTo(lineup, position, target));
-}
-
-function Court({ lineup, selected, movingPosition, canPick, canMove, onPick, onStartMove, onMove }: LineupPickerProps) {
-  return (
-    <section className="court">
-      {POSITIONS.map((position) => {
-        const slot = lineup[position];
-        const pickTarget = Boolean(canPick && selected?.openPositions.includes(position) && !slot);
-        const moveTarget = Boolean(canMove && movingPosition && canMoveTo(lineup, movingPosition, position));
-        const moveSource = Boolean(canMove && slot && canMoveFrom(lineup, position));
-        const available = pickTarget || moveTarget;
-        const details = slot ? slotDetails(slot) : undefined;
-        return (
-          <button
-            className={`court-slot ${position} ${slot ? "filled" : ""} ${available ? "available" : ""} ${moveSource ? "move-source" : ""} ${movingPosition === position ? "moving" : ""}`}
-            type="button"
-            key={position}
-            disabled={!available && !slot}
-            aria-disabled={!available && !moveSource}
-            aria-label={details ?? `${position} slot`}
-            draggable={moveSource}
-            onClick={moveTarget && movingPosition ? () => onMove(movingPosition, position) : pickTarget ? () => onPick(position) : moveSource ? () => onStartMove(position) : undefined}
-            onDragStart={
-              moveSource
-                ? (event) => {
-                    event.dataTransfer.effectAllowed = "move";
-                    event.dataTransfer.setData("text/plain", position);
-                    onStartMove(position);
-                  }
-                : undefined
-            }
-            onDragOver={
-              moveTarget
-                ? (event) => {
-                    event.preventDefault();
-                    event.dataTransfer.dropEffect = "move";
-                  }
-                : undefined
-            }
-            onDrop={
-              moveTarget
-                ? (event) => {
-                    event.preventDefault();
-                    const fromPosition = event.dataTransfer.getData("text/plain");
-                    if (POSITIONS.includes(fromPosition as Position)) onMove(fromPosition as Position, position);
-                    else if (movingPosition) onMove(movingPosition, position);
-                  }
-                : undefined
-            }
-            data-tooltip={details}
-            data-testid={`court-slot-${position}`}
-          >
-            <span className="court-ring" aria-hidden="true" />
-            <span className="court-core" aria-hidden="true" />
-            {slot ? (
-              <PlayerInitials slot={slot} className="court-initials">
-                {initials(slot.player)}
-                <small>{position}</small>
-              </PlayerInitials>
-            ) : (
-              <span className="court-label">{position}</span>
-            )}
-          </button>
-        );
-      })}
-    </section>
-  );
-}
-
-function PlayerInitials({ slot, className, children }: { slot: LineupSlot; className: string; children: ReactNode }) {
-  const details = slotDetails(slot);
-  return (
-    <span className={`${className} initials-tooltip`} aria-label={details} data-tooltip={details}>
-      {children}
-    </span>
-  );
-}
-
-function MobileLineup({ lineup, selected, movingPosition, canPick, canMove, onPick, onStartMove, onMove }: LineupPickerProps) {
-  return (
-    <section className="mobile-lineup" data-testid="mobile-lineup-strip">
-      <div className="mobile-slots">
-        {POSITIONS.map((position) => {
-          const slot = lineup[position];
-          const pickTarget = Boolean(canPick && selected?.openPositions.includes(position) && !slot);
-          const moveTarget = Boolean(canMove && movingPosition && canMoveTo(lineup, movingPosition, position));
-          const moveSource = Boolean(canMove && slot && canMoveFrom(lineup, position));
-          const available = pickTarget || moveTarget;
-          const details = slot ? slotDetails(slot) : undefined;
-          return (
-            <button
-              className={`mobile-slot ${slot ? "filled" : ""} ${available ? "available" : ""} ${moveSource ? "move-source" : ""} ${movingPosition === position ? "moving" : ""}`}
-              type="button"
-              key={position}
-              disabled={!available && !slot}
-              aria-disabled={!available && !moveSource}
-              aria-label={details ?? `${position} slot`}
-              onClick={moveTarget && movingPosition ? () => onMove(movingPosition, position) : pickTarget ? () => onPick(position) : moveSource ? () => onStartMove(position) : undefined}
-              data-testid={`mobile-slot-${position}`}
-            >
-              {slot ? (
-                <PlayerInitials slot={slot} className="mobile-initials">
-                  <strong>{initials(slot.player)}</strong>
-                </PlayerInitials>
-              ) : (
-                <strong>{position}</strong>
-              )}
-            </button>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
-function Opponents({ state }: { state: PublicLobbyState }) {
-  const match = state.activeMatch;
-  if (!match) return null;
-  return (
-    <section className="panel panel-pad stack">
-      <p className="section-title">Lobby Progress</p>
-      {match.tiebreakerOf ? <div className="notice">Tiebreaker match: only tied players are drafting this round.</div> : null}
-      {match.runs.map((run) => {
-        const result = run.finalResult;
-        const progress = Math.round((run.picks.length / 5) * 100);
-        return (
-          <div className="opponent-card" key={run.id}>
-            <div className="opponent-top">
-              <div>
-                <p className="player-name">{playerName(state, run.playerId)}</p>
-                <p className="eyebrow">
-                  Round {run.round}/5 · ${run.budgetLeft} left · {run.status}
-                </p>
-              </div>
-              {result ? (
-                <strong className="grade">
-                  {result.wins}-{result.losses}
-                </strong>
-              ) : (
-                <span className="eyebrow">{run.currentSpin ? `${run.currentSpin.team} ${run.currentSpin.era}` : "No spin"}</span>
-              )}
-            </div>
-            <div className="progress-bar" aria-hidden="true">
-              <div className="progress-fill" style={{ width: `${progress}%` }} />
-            </div>
-            <MiniLineup run={run} />
-          </div>
-        );
-      })}
-    </section>
-  );
-}
-
-function MiniLineup({ run }: { run: PublicRun }) {
-  return (
-    <div className="lineup-mini">
-      {POSITIONS.map((position) => {
-        const slot = run.lineup[position];
-        return (
-          slot ? (
-            <PlayerInitials slot={slot} className="mini-slot filled" key={position}>
-              {initials(slot.player)}
-            </PlayerInitials>
-          ) : (
-            <div className="mini-slot" key={position}>
-              {position}
-            </div>
-          )
-        );
-      })}
-    </div>
-  );
-}
-
-function Standings({ state, onNext, isHost, busy }: { state: PublicLobbyState; onNext: () => void; isHost: boolean; busy: boolean }) {
-  return (
-    <section className="panel panel-pad stack">
-      <p className="section-title">Standings</p>
-      {state.standings.map((standing) => (
-        <div className="standing-row" key={standing.playerId}>
-          <strong>{playerName(state, standing.playerId)}</strong>
-          <span className="eyebrow">
-            {standing.wins}W · {standing.losses}L · {standing.ties}T
-          </span>
-        </div>
-      ))}
-      {state.status === "results" ? (
-        <button className="btn primary" type="button" disabled={!isHost || busy} onClick={onNext}>
-          <RotateCcw size={17} />
-          Play Again
-        </button>
-      ) : null}
-    </section>
-  );
-}
-
-function Events({ state }: { state: PublicLobbyState }) {
-  return (
-    <section className="panel panel-pad stack">
-      <p className="section-title">Event History</p>
-      {state.events.slice(0, 8).map((event) => (
-        <div className="event-row" key={event.id}>
-          <p className="eyebrow">
-            {new Date(event.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · {event.type}
-          </p>
-        </div>
-      ))}
     </section>
   );
 }
