@@ -371,15 +371,16 @@ async function applyParallelAction(client: PoolClient, lobby: LobbyRow, match: M
 }
 
 async function applySnakeAction(client: PoolClient, lobby: LobbyRow, match: MatchRow, actor: LobbyPlayerRow, parsed: z.infer<typeof ActionSchema>) {
-  if (match.current_turn_player_id !== actor.id) throw new AppError(403, "not_your_turn", "Only the current drafter can act.");
   const run = await requireRun(client, match.id, actor.id);
   if (run.status !== "active") throw new AppError(409, "run_not_active", "Your draft is not active.");
-  const currentSpin = match.current_spin;
 
   if (parsed.action === "move-pick") {
     await movePick(client, lobby, match, run, actor.id, parsed.fromPosition, parsed.position);
     return;
   }
+
+  if (match.current_turn_player_id !== actor.id) throw new AppError(403, "not_your_turn", "Only the current drafter can act.");
+  const currentSpin = match.current_spin;
 
   if (parsed.action === "spin") {
     if (currentSpin) throw new AppError(409, "spin_already_active", "Pick from the current spin before spinning again.");
@@ -547,12 +548,16 @@ async function movePick(
 
   const slot = run.lineup[fromPosition];
   if (!slot) throw new AppError(409, "source_empty", "There is no player in that lineup slot.");
-  if (run.lineup[position]) throw new AppError(409, "position_filled", "That lineup slot is already filled.");
   if (!slot.positions.includes(position)) throw new AppError(409, "wrong_position", "Player cannot play that position.");
+  const targetSlot = run.lineup[position];
+  if (targetSlot && !targetSlot.positions.includes(fromPosition)) {
+    throw new AppError(409, "wrong_position", "Those players cannot swap positions.");
+  }
 
   const lineup = { ...run.lineup };
   delete lineup[fromPosition];
   lineup[position] = { ...slot, position };
+  if (targetSlot) lineup[fromPosition] = { ...targetSlot, position: fromPosition };
 
   await client.query(
     `UPDATE runs SET lineup = $2::jsonb, updated_at = now() WHERE id = $1`,
@@ -562,7 +567,17 @@ async function movePick(
     `UPDATE picks SET position = $3 WHERE run_id = $1 AND player_season_id = $2`,
     [run.id, slot.playerId, position],
   );
-  await recordEvent(client, lobby.id, match.id, playerId, "pick.moved", { player: slot.player, fromPosition, position });
+  if (targetSlot) {
+    await client.query(
+      `UPDATE picks SET position = $3 WHERE run_id = $1 AND player_season_id = $2`,
+      [run.id, targetSlot.playerId, fromPosition],
+    );
+  }
+  const eventType = targetSlot ? "pick.swapped" : "pick.moved";
+  const eventPayload = targetSlot
+    ? { player: slot.player, fromPosition, position, swappedWith: targetSlot.player }
+    : { player: slot.player, fromPosition, position };
+  await recordEvent(client, lobby.id, match.id, playerId, eventType, eventPayload);
 
   return { ...run, lineup };
 }
