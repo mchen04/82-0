@@ -27,10 +27,10 @@ async function main() {
     await browser("set", "viewport", "1280", "900");
     await evalPage(`localStorage.setItem(${JSON.stringify(`better82:${seed.code}:token`)}, ${JSON.stringify(seed.token)}); location.reload();`);
     await waitForPage(filledScript(seed.fromPosition, seed.player));
-    await waitForPage(progressDetailScript(seed.hostPlayerId, "spin", "No spin"));
+    await waitForPage(progressCardScript(seed.hostPlayerId, "No spin"));
     await waitForPage(progressDetailScript(seed.hostPlayerId, "team-reroll", "Used"));
     await waitForPage(progressDetailScript(seed.hostPlayerId, "decade-reroll", "Available"));
-    await waitForPage(progressDetailScript(seed.guestPlayerId, "spin", `${seed.guestSpin.team} ${seed.guestSpin.era}`));
+    await waitForPage(progressCardScript(seed.guestPlayerId, `${seed.guestSpin.team} ${seed.guestSpin.era}`));
     await waitForPage(progressDetailScript(seed.guestPlayerId, "team-reroll", "Available"));
     await waitForPage(progressDetailScript(seed.guestPlayerId, "decade-reroll", "Used"));
 
@@ -380,17 +380,25 @@ function enabledScript(position: string) {
   `;
 }
 
-function progressDetailScript(playerId: string, field: "spin" | "team-reroll" | "decade-reroll", expected: string) {
+function progressCardScript(playerId: string, expected: string) {
+  return `
+    const card = document.querySelector('[data-testid=${JSON.stringify(`progress-card-${playerId}`)}]');
+    if (!card) throw new Error('missing progress card for ${playerId}');
+    if (card.querySelector('[data-testid^="progress-spin-"]')) throw new Error('spin progress detail should not render');
+    const label = card.querySelector('.progress-spin-label');
+    if (!label) throw new Error('missing compact spin label for ${playerId}');
+    if (!label.textContent.includes(${JSON.stringify(expected)})) throw new Error('compact spin label did not include ${expected}');
+    const style = getComputedStyle(label);
+    if (style.whiteSpace === 'nowrap') throw new Error('compact spin label should be allowed to wrap');
+    if (style.overflowWrap !== 'anywhere') throw new Error('compact spin label should preserve long team and decade text');
+  `;
+}
+
+function progressDetailScript(playerId: string, field: "team-reroll" | "decade-reroll", expected: string) {
   return `
     const detail = document.querySelector('[data-testid=${JSON.stringify(`progress-${field}-${playerId}`)}]');
     if (!detail) throw new Error('missing ${field} progress detail for ${playerId}');
     if (!detail.textContent.includes(${JSON.stringify(expected)})) throw new Error('${field} progress detail did not include ${expected}');
-    const value = detail.querySelector('strong');
-    if (${JSON.stringify(field)} === 'spin') {
-      const style = getComputedStyle(value);
-      if (style.whiteSpace === 'nowrap') throw new Error('spin progress value should be allowed to wrap');
-      if (style.overflowWrap !== 'anywhere') throw new Error('spin progress value should preserve long team and decade text');
-    }
   `;
 }
 
