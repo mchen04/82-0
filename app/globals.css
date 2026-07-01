@@ -723,8 +723,10 @@ a {
 
 .initials-tooltip:hover::after,
 .initials-tooltip:focus-visible::after,
+.court-slot[data-tooltip]:focus .initials-tooltip::after,
 .court-slot[data-tooltip]:hover .initials-tooltip::after,
 .court-slot[data-tooltip]:focus-visible .initials-tooltip::after,
+.mobile-slot:focus .initials-tooltip::after,
 .mobile-slot:hover .initials-tooltip::after,
 .mobile-slot:focus-visible .initials-tooltip::after {
   opacity: 1;

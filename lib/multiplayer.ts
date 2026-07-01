@@ -5,75 +5,26 @@ import { AppError } from "./errors";
 import { getLocalPlayer } from "./game-data";
 import { cleanupExpiredLobbies, closeLobbyIfExpired, lobbyExpiredError } from "./lobby-lifecycle";
 import { expirationSql, shouldCloseLobby } from "./lobby-policy";
+import {
+  getActiveLobbyPlayers,
+  getLobbyByCode,
+  getPlayerSeason,
+  lockLobbyByCode,
+  lockMatchById,
+  lockRunsForMatch,
+  requireActiveMatch,
+  requirePlayerByToken,
+  requireRun,
+  selectedIdsForMatch,
+  type LobbyPlayerRow,
+  type LobbyRow,
+  type MatchRow,
+  type RunRow,
+} from "./lobby-repository";
+import { buildPublicMatch } from "./lobby-serializer";
 import { capAmountFor, isLegalCost, maxLegalCost, openPositions, scoreLineup, selectedPlayerIds, slotCount, toLineupSlot } from "./rules";
 import { id, lobbyCode, pickRandom, secretToken } from "./random";
-import { POSITIONS, type Candidate, type CapType, type Lineup, type LobbyMode, type PlayerSeason, type Position, type PublicLobbyState, type PublicMatch, type PublicRun, type Spin } from "./types";
-
-type LobbyRow = {
-  id: string;
-  code: string;
-  mode: LobbyMode;
-  cap_type: CapType;
-  cap_amount: number;
-  status: "lobby" | "active" | "results" | "closed";
-  rerolls_enabled: boolean;
-  host_player_id: string | null;
-  active_match_id: string | null;
-  state_version: number;
-  last_activity_at: Date;
-  expires_at: Date;
-  closed_at: Date | null;
-  close_reason: "expired" | "manual" | null;
-};
-
-type LobbyPlayerRow = {
-  id: string;
-  lobby_id: string;
-  name: string;
-  token: string;
-  active: boolean;
-  joined_at: Date;
-};
-
-type MatchRow = {
-  id: string;
-  lobby_id: string;
-  mode: LobbyMode;
-  round_no: number;
-  status: "active" | "complete";
-  participant_ids: string[];
-  current_turn_player_id: string | null;
-  current_pick_index: number;
-  current_spin: Spin | null;
-  winner_ids: string[];
-  tiebreaker_of: string | null;
-};
-
-type RunRow = {
-  id: string;
-  lobby_id: string;
-  match_id: string;
-  player_id: string;
-  status: "active" | "finished" | "lost";
-  round: number;
-  cap_spent: number;
-  team_reroll_used: boolean;
-  decade_reroll_used: boolean;
-  current_spin: Spin | null;
-  lineup: Lineup;
-  final_result: PublicRun["finalResult"];
-  lost_reason: string | null;
-};
-
-type PlayerSeasonRow = {
-  player_id: string;
-  player_name: string;
-  team: string;
-  era: string;
-  positions: Position[];
-  cost: number;
-  data: PlayerSeason;
-};
+import { POSITIONS, type Lineup, type PlayerSeason, type Position, type PublicLobbyState, type Spin } from "./types";
 
 const CreateLobbySchema = z.object({
   name: z.string().trim().min(1).max(32).default("Player 1"),
@@ -103,31 +54,6 @@ export type JoinLobbyInput = z.input<typeof JoinLobbySchema>;
 export type ActionInput = z.input<typeof ActionSchema>;
 
 export { cleanupExpiredLobbies };
-
-const LOBBY_COLUMNS = `
-  id,
-  code,
-  mode,
-  cap_type,
-  cap_amount,
-  status,
-  rerolls_enabled,
-  host_player_id,
-  active_match_id,
-  state_version,
-  last_activity_at,
-  expires_at,
-  closed_at,
-  close_reason
-`;
-
-const LOBBY_PLAYER_COLUMNS = "id, lobby_id, name, token, active, joined_at";
-const MATCH_COLUMNS = "id, lobby_id, mode, round_no, status, participant_ids, current_turn_player_id, current_pick_index, current_spin, winner_ids, tiebreaker_of";
-const RUN_COLUMNS = "id, lobby_id, match_id, player_id, status, round, cap_spent, team_reroll_used, decade_reroll_used, current_spin, lineup, final_result, lost_reason";
-
-function normalizeCode(code: string) {
-  return code.trim().toUpperCase();
-}
 
 export async function createLobby(input: unknown) {
   const parsed = CreateLobbySchema.parse(input);
@@ -188,10 +114,7 @@ export async function getLobbyState(code: string, token?: string | null): Promis
     const lobby = await getLobbyByCode(client, code);
     if (lobby.status === "closed" || shouldCloseLobby(lobby)) return null;
 
-    const playersResult = await client.query<LobbyPlayerRow>(
-      `SELECT ${LOBBY_PLAYER_COLUMNS} FROM lobby_players WHERE lobby_id = $1 AND active = true ORDER BY joined_at ASC`,
-      [lobby.id],
-    );
+    const playersResult = await getActiveLobbyPlayers(client, lobby.id);
     const viewer = token ? playersResult.rows.find((player) => player.token === token) ?? null : null;
     const activeMatch = lobby.active_match_id ? await buildPublicMatch(client, lobby, lobby.active_match_id, viewer?.id ?? null) : null;
     const standings = await client.query<{
@@ -310,38 +233,6 @@ async function closeExpiredLobbyByCode(code: string) {
   });
 }
 
-async function getLobbyByCode(client: DbClient, code: string) {
-  const result = await client.query<LobbyRow>(`SELECT ${LOBBY_COLUMNS} FROM lobbies WHERE code = $1`, [normalizeCode(code)]);
-  const lobby = result.rows[0];
-  if (!lobby) throw new AppError(404, "not_found", "Lobby not found.");
-  return lobby;
-}
-
-async function lockLobbyByCode(client: PoolClient, code: string) {
-  const result = await client.query<LobbyRow>(`SELECT ${LOBBY_COLUMNS} FROM lobbies WHERE code = $1 FOR UPDATE`, [normalizeCode(code)]);
-  const lobby = result.rows[0];
-  if (!lobby) throw new AppError(404, "not_found", "Lobby not found.");
-  return lobby;
-}
-
-async function requirePlayerByToken(client: PoolClient, lobbyId: string, token: string) {
-  const result = await client.query<LobbyPlayerRow>(
-    `SELECT ${LOBBY_PLAYER_COLUMNS} FROM lobby_players WHERE lobby_id = $1 AND token = $2 AND active = true`,
-    [lobbyId, token],
-  );
-  const player = result.rows[0];
-  if (!player) throw new AppError(403, "not_player", "You are not a player in this lobby.");
-  return player;
-}
-
-async function requireActiveMatch(client: PoolClient, lobby: LobbyRow) {
-  if (lobby.status !== "active" || !lobby.active_match_id) throw new AppError(409, "no_active_match", "No active match is running.");
-  const result = await client.query<MatchRow>(`SELECT ${MATCH_COLUMNS} FROM matches WHERE id = $1 FOR UPDATE`, [lobby.active_match_id]);
-  const match = result.rows[0];
-  if (!match || match.status !== "active") throw new AppError(409, "no_active_match", "No active match is running.");
-  return match;
-}
-
 async function updateSettings(client: PoolClient, lobby: LobbyRow, actor: LobbyPlayerRow, parsed: z.infer<typeof ActionSchema>) {
   if (lobby.status !== "lobby") throw new AppError(409, "lobby_started", "Settings are locked after the match starts.");
   if (lobby.host_player_id && lobby.host_player_id !== actor.id) {
@@ -377,7 +268,7 @@ async function startNextMatch(client: PoolClient, lobby: LobbyRow, actor: LobbyP
 async function createMatch(client: PoolClient, lobby: LobbyRow, participantIds: string[] | null, roundNo: number, tiebreakerOf?: string) {
   const players = participantIds
     ? participantIds
-    : (await client.query<LobbyPlayerRow>(`SELECT ${LOBBY_PLAYER_COLUMNS} FROM lobby_players WHERE lobby_id = $1 AND active = true ORDER BY joined_at ASC`, [lobby.id])).rows.map((player) => player.id);
+    : (await getActiveLobbyPlayers(client, lobby.id)).rows.map((player) => player.id);
   if (players.length < 2) throw new AppError(409, "not_enough_players", "At least two players are required.");
 
   const matchId = id();
@@ -480,22 +371,6 @@ async function applySnakeAction(client: PoolClient, lobby: LobbyRow, match: Matc
   }
 
   throw new AppError(400, "invalid_action", "That action is not valid for Shared Snake Draft.");
-}
-
-async function requireRun(client: PoolClient, matchId: string, playerId: string) {
-  const result = await client.query<RunRow>(`SELECT ${RUN_COLUMNS} FROM runs WHERE match_id = $1 AND player_id = $2 FOR UPDATE`, [matchId, playerId]);
-  const run = result.rows[0];
-  if (!run) throw new AppError(404, "run_not_found", "Run not found.");
-  return normalizeRunRow(run);
-}
-
-function normalizeRunRow(row: RunRow): RunRow {
-  return {
-    ...row,
-    current_spin: row.current_spin ?? null,
-    lineup: row.lineup ?? {},
-    final_result: row.final_result ?? null,
-  };
 }
 
 async function chooseLegalSpin(client: PoolClient, lobby: LobbyRow, match: MatchRow, run: RunRow, shared: boolean) {
@@ -700,58 +575,12 @@ async function legalTeamEras(client: PoolClient, lobby: LobbyRow, match: MatchRo
   return result.rows;
 }
 
-async function selectedIdsForMatch(client: DbClient, matchId: string) {
-  const result = await client.query<{ player_season_id: string }>(`SELECT player_season_id FROM picks WHERE match_id = $1`, [matchId]);
-  return result.rows.map((row) => row.player_season_id);
-}
-
-async function getPlayerSeason(client: DbClient, playerSeasonId: string) {
-  const result = await client.query<PlayerSeasonRow>(
-    `SELECT player_id, player_name, team, era, positions, cost, data FROM player_seasons WHERE player_id = $1`,
-    [playerSeasonId],
-  );
-  return result.rows[0] ?? null;
-}
-
-async function buildCandidates(client: DbClient, lobby: LobbyRow, match: MatchRow, run: RunRow | null, spin: Spin | null, shared: boolean): Promise<Candidate[]> {
-  if (!spin || !run || run.status !== "active") return [];
-  const excluded = shared ? await selectedIdsForMatch(client, match.id) : selectedPlayerIds(run.lineup);
-  const open = openPositions(run.lineup);
-  const maxCost = maxLegalCost(lobby.cap_type, lobby.cap_amount, run.cap_spent, slotCount(run.lineup));
-  const result = await client.query<PlayerSeasonRow>(
-    `SELECT player_id, player_name, team, era, positions, cost, data
-     FROM player_seasons
-     WHERE team = $1 AND era = $2 AND NOT (player_id = ANY($3::text[]))
-     ORDER BY (data->>'overall')::numeric DESC, player_name ASC`,
-    [spin.team, spin.era, excluded],
-  );
-  return result.rows.map((row) => {
-    const player = row.data;
-    const openForPlayer = player.positions.filter((position) => open.includes(position));
-    const affordable = lobby.cap_type === "soft" || row.cost <= maxCost;
-    return {
-      id: row.player_id,
-      player: row.player_name,
-      team: row.team,
-      era: row.era,
-      positions: row.positions,
-      overall: player.overall,
-      perGame: player.perGame,
-      ratings: player.ratings,
-      cost: row.cost,
-      assignable: openForPlayer.length > 0 && affordable,
-      affordable,
-      openPositions: openForPlayer,
-    };
-  });
-}
-
 async function advanceSnakeTurn(client: PoolClient, lobby: LobbyRow, matchId: string) {
-  let match = (await client.query<MatchRow>(`SELECT ${MATCH_COLUMNS} FROM matches WHERE id = $1 FOR UPDATE`, [matchId])).rows[0];
+  let match = await lockMatchById(client, matchId);
   if (!match || match.status !== "active" || match.mode !== "snake") return;
 
   for (let guard = 0; guard < match.participant_ids.length * 5 + 5; guard += 1) {
-    const runs = (await client.query<RunRow>(`SELECT ${RUN_COLUMNS} FROM runs WHERE match_id = $1 ORDER BY created_at ASC FOR UPDATE`, [matchId])).rows.map(normalizeRunRow);
+    const runs = await lockRunsForMatch(client, matchId);
     if (runs.every((run) => run.status !== "active")) return;
 
     const nextPlayerId = playerForSnakePick(match.participant_ids, match.current_pick_index);
@@ -785,7 +614,8 @@ async function advanceSnakeTurn(client: PoolClient, lobby: LobbyRow, matchId: st
        WHERE id = $1`,
       [matchId, nextPickIndex, snakePickStartsCycle(match.participant_ids, nextPickIndex)],
     );
-    match = (await client.query<MatchRow>(`SELECT ${MATCH_COLUMNS} FROM matches WHERE id = $1 FOR UPDATE`, [matchId])).rows[0];
+    match = await lockMatchById(client, matchId);
+    if (!match) return;
   }
 }
 
@@ -862,9 +692,9 @@ function spinKey(spin: Spin) {
 }
 
 async function maybeCompleteMatch(client: PoolClient, lobby: LobbyRow, matchId: string) {
-  const match = (await client.query<MatchRow>(`SELECT ${MATCH_COLUMNS} FROM matches WHERE id = $1 FOR UPDATE`, [matchId])).rows[0];
+  const match = await lockMatchById(client, matchId);
   if (!match || match.status !== "active") return;
-  const runs = (await client.query<RunRow>(`SELECT ${RUN_COLUMNS} FROM runs WHERE match_id = $1 FOR UPDATE`, [matchId])).rows.map(normalizeRunRow);
+  const runs = await lockRunsForMatch(client, matchId);
   if (!runs.every((run) => run.status === "finished" || run.status === "lost")) return;
 
   const scored = runs.map((run) => ({
@@ -906,51 +736,6 @@ async function maybeCompleteMatch(client: PoolClient, lobby: LobbyRow, matchId: 
     [lobby.id, winner, match.participant_ids],
   );
   await client.query(`UPDATE lobbies SET status = 'results', active_match_id = $2, updated_at = now() WHERE id = $1`, [lobby.id, match.id]);
-}
-
-async function buildPublicMatch(client: DbClient, lobby: LobbyRow, matchId: string, viewerPlayerId: string | null): Promise<PublicMatch | null> {
-  const match = (await client.query<MatchRow>(`SELECT ${MATCH_COLUMNS} FROM matches WHERE id = $1`, [matchId])).rows[0];
-  if (!match) return null;
-  const runs = (await client.query<RunRow>(`SELECT ${RUN_COLUMNS} FROM runs WHERE match_id = $1 ORDER BY created_at ASC`, [match.id])).rows.map(normalizeRunRow);
-  const publicRuns = runs.map(publicRunForLobby(lobby));
-  const currentRun = match.mode === "snake"
-    ? runs.find((run) => run.player_id === match.current_turn_player_id) ?? null
-    : runs.find((run) => run.player_id === viewerPlayerId) ?? null;
-  const currentSpin = match.mode === "snake" ? match.current_spin : currentRun?.current_spin ?? null;
-  const candidates = await buildCandidates(client, lobby, match, currentRun, currentSpin, match.mode === "snake");
-
-  return {
-    id: match.id,
-    mode: match.mode,
-    roundNo: match.round_no,
-    status: match.status,
-    participantIds: match.participant_ids,
-    currentTurnPlayerId: match.current_turn_player_id,
-    currentPickIndex: match.current_pick_index,
-    currentSpin,
-    winnerIds: match.winner_ids ?? [],
-    tiebreakerOf: match.tiebreaker_of,
-    runs: publicRuns,
-    candidates,
-  };
-}
-
-function publicRunForLobby(lobby: LobbyRow) {
-  return (run: RunRow): PublicRun => ({
-    id: run.id,
-    playerId: run.player_id,
-    status: run.status,
-    round: run.round,
-    capSpent: run.cap_spent,
-    budgetLeft: lobby.cap_amount - run.cap_spent,
-    teamRerollUsed: run.team_reroll_used,
-    decadeRerollUsed: run.decade_reroll_used,
-    currentSpin: run.current_spin,
-    lineup: run.lineup,
-    picks: POSITIONS.map((position) => run.lineup[position]).filter(Boolean) as PublicRun["picks"],
-    finalResult: run.final_result,
-    lostReason: run.lost_reason,
-  });
 }
 
 async function bumpLobbyVersion(client: PoolClient, lobbyId: string) {

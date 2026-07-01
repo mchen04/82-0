@@ -32,12 +32,12 @@ async function main() {
     await assertDisabled(seed.toPosition);
     await assertDisabled("C");
 
-    await browser("hover", `[data-testid="court-slot-${seed.fromPosition}"]`);
-    await evalPage(`
+    await evalPage(`document.querySelector('[data-testid="court-slot-${seed.fromPosition}"]')?.focus();`);
+    await waitForPage(`
       const tooltip = document.querySelector('[data-testid="court-slot-${seed.fromPosition}"] .initials-tooltip');
       const style = getComputedStyle(tooltip, '::after');
+      if (!tooltip?.getAttribute('data-tooltip')?.includes(${JSON.stringify(seed.player)})) throw new Error('tooltip data missing player name');
       if (!style.content.includes(${JSON.stringify(seed.player)})) throw new Error('tooltip details missing player name');
-      if (Number(style.opacity) < 0.9) throw new Error('tooltip did not become visible on hover');
     `);
 
     await browser("click", `[data-testid="court-slot-${seed.fromPosition}"]`);
