@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Check, Copy, Crown, Play, RotateCcw, Shuffle, Swords, Trophy } from "lucide-react";
 import { Header } from "./home-app";
 import { formatStat, HARD_CAP_AMOUNT, initials, SOFT_CAP_AMOUNT } from "@/lib/rules";
@@ -25,6 +25,10 @@ function tokenKey(code: string) {
 function playerName(state: PublicLobbyState | null, id: string | null | undefined) {
   if (!state || !id) return "Unknown";
   return state.players.find((player) => player.id === id)?.name ?? "Unknown";
+}
+
+function slotDetails(slot: LineupSlot) {
+  return `${slot.player} · ${slot.team} · ${slot.era} · $${slot.cost}`;
 }
 
 export function LobbyApp({ code }: { code: string }) {
@@ -192,6 +196,8 @@ export function LobbyApp({ code }: { code: string }) {
               {error ? <div className="error">{error}</div> : null}
               {capStatusPanel}
               {spinPanel}
+              {state ? <Opponents state={state} /> : null}
+              {state ? <Events state={state} /> : null}
             </div>
             <div className="draft-board">{boardPanel}</div>
           </>
@@ -216,9 +222,9 @@ export function LobbyApp({ code }: { code: string }) {
           {state ? (
             <>
               <Court lineup={viewerRun?.lineup ?? {}} selected={selected} canAct={canAct} onPick={(position) => selected && action("pick", { playerSeasonId: selected.id, position })} />
-              <Opponents state={state} />
+              {!showDraftLayout ? <Opponents state={state} /> : null}
               <Standings state={state} onNext={() => action("next-match")} isHost={isHost} busy={busy} />
-              <Events state={state} />
+              {!showDraftLayout ? <Events state={state} /> : null}
             </>
           ) : null}
         </aside>
@@ -567,15 +573,26 @@ function Court({ lineup, selected, canAct, onPick }: { lineup: Partial<Record<Po
       {POSITIONS.map((position) => {
         const slot = lineup[position];
         const available = Boolean(canAct && selected?.openPositions.includes(position) && !slot);
+        const details = slot ? slotDetails(slot) : undefined;
         return (
-          <button className={`court-slot ${position} ${slot ? "filled" : ""} ${available ? "available" : ""}`} type="button" key={position} disabled={!available} onClick={() => onPick(position)} data-testid={`court-slot-${position}`}>
+          <button
+            className={`court-slot ${position} ${slot ? "filled" : ""} ${available ? "available" : ""}`}
+            type="button"
+            key={position}
+            disabled={!available && !slot}
+            aria-disabled={!available}
+            onClick={available ? () => onPick(position) : undefined}
+            title={details}
+            data-tooltip={details}
+            data-testid={`court-slot-${position}`}
+          >
             <span className="court-ring" aria-hidden="true" />
             <span className="court-core" aria-hidden="true" />
             {slot ? (
-              <span className="court-initials">
+              <PlayerInitials slot={slot} className="court-initials">
                 {initials(slot.player)}
                 <small>{position}</small>
-              </span>
+              </PlayerInitials>
             ) : (
               <span className="court-label">{position}</span>
             )}
@@ -586,6 +603,15 @@ function Court({ lineup, selected, canAct, onPick }: { lineup: Partial<Record<Po
   );
 }
 
+function PlayerInitials({ slot, className, children }: { slot: LineupSlot; className: string; children: ReactNode }) {
+  const details = slotDetails(slot);
+  return (
+    <span className={`${className} initials-tooltip`} title={details} data-tooltip={details}>
+      {children}
+    </span>
+  );
+}
+
 function MobileLineup({ lineup, selected, canAct, onPick }: { lineup: Partial<Record<Position, LineupSlot>>; selected: Candidate | null; canAct: boolean; onPick: (position: Position) => void }) {
   return (
     <section className="mobile-lineup" data-testid="mobile-lineup-strip">
@@ -593,9 +619,25 @@ function MobileLineup({ lineup, selected, canAct, onPick }: { lineup: Partial<Re
         {POSITIONS.map((position) => {
           const slot = lineup[position];
           const available = Boolean(canAct && selected?.openPositions.includes(position) && !slot);
+          const details = slot ? slotDetails(slot) : undefined;
           return (
-            <button className={`mobile-slot ${slot ? "filled" : ""} ${available ? "available" : ""}`} type="button" key={position} disabled={!available} onClick={() => onPick(position)} data-testid={`mobile-slot-${position}`}>
-              <strong>{slot ? initials(slot.player) : position}</strong>
+            <button
+              className={`mobile-slot ${slot ? "filled" : ""} ${available ? "available" : ""}`}
+              type="button"
+              key={position}
+              disabled={!available && !slot}
+              aria-disabled={!available}
+              onClick={available ? () => onPick(position) : undefined}
+              title={details}
+              data-testid={`mobile-slot-${position}`}
+            >
+              {slot ? (
+                <PlayerInitials slot={slot} className="mobile-initials">
+                  <strong>{initials(slot.player)}</strong>
+                </PlayerInitials>
+              ) : (
+                <strong>{position}</strong>
+              )}
             </button>
           );
         })}
@@ -648,9 +690,15 @@ function MiniLineup({ run }: { run: PublicRun }) {
       {POSITIONS.map((position) => {
         const slot = run.lineup[position];
         return (
-          <div className={`mini-slot ${slot ? "filled" : ""}`} key={position}>
-            {slot ? initials(slot.player) : position}
-          </div>
+          slot ? (
+            <PlayerInitials slot={slot} className="mini-slot filled" key={position}>
+              {initials(slot.player)}
+            </PlayerInitials>
+          ) : (
+            <div className="mini-slot" key={position}>
+              {position}
+            </div>
+          )
         );
       })}
     </div>
