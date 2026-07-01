@@ -59,11 +59,15 @@ export async function ensureDatabaseReady() {
 async function prepareDatabase() {
   const client = await getPool().connect();
   try {
-    await client.query("SELECT pg_advisory_lock(820820)");
+    await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock(820820)");
     await createSchema(client);
     await seedGameData(client);
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw error;
   } finally {
-    await client.query("SELECT pg_advisory_unlock(820820)").catch(() => undefined);
     client.release();
   }
 }

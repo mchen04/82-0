@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, Copy, Crown, Play, RotateCcw, Shuffle, Swords, Trophy } from "lucide-react";
 import { Header } from "./home-app";
-import { formatStat, initials } from "@/lib/rules";
+import { formatStat, HARD_CAP_AMOUNT, initials, SOFT_CAP_AMOUNT } from "@/lib/rules";
 import { POSITIONS, type Candidate, type CapType, type LineupSlot, type LobbyMode, type Position, type PublicLobbyState, type PublicRun } from "@/lib/types";
 
 type ActionName = "settings" | "start" | "spin" | "reroll-team" | "reroll-decade" | "pick" | "next-match";
@@ -141,7 +141,7 @@ export function LobbyApp({ code }: { code: string }) {
           <>
             <div className="budget-card">
               <p className="eyebrow">Budget</p>
-              <p className="budget-number">${visibleRun?.budgetLeft ?? state?.capAmount ?? 88}</p>
+              <p className="budget-number">${visibleRun?.budgetLeft ?? state?.capAmount ?? HARD_CAP_AMOUNT}</p>
             </div>
             <button className="btn icon" type="button" onClick={copyInvite} title="Copy invite link" aria-label="Copy invite link">
               {copied ? <Check size={18} /> : <Copy size={18} />}
@@ -243,10 +243,10 @@ function LobbySetup({ state, busy, isHost, onAction }: { state: PublicLobbyState
       </div>
       <div className="segmented">
         <button className={`btn ${state.capType === "hard" ? "green" : ""}`} type="button" disabled={!isHost || busy} onClick={() => onAction("settings", { capType: "hard" })}>
-          Hard $88
+          Hard ${HARD_CAP_AMOUNT}
         </button>
         <button className={`btn ${state.capType === "soft" ? "blue" : ""}`} type="button" disabled={!isHost || busy} onClick={() => onAction("settings", { capType: "soft" })}>
-          Soft $88
+          Soft ${SOFT_CAP_AMOUNT}
         </button>
       </div>
       <button className="btn" type="button" disabled={!isHost || busy} onClick={() => onAction("settings", { rerollsEnabled: !state.rerollsEnabled })}>
@@ -276,7 +276,7 @@ function CapStatus({ state, run }: { state: PublicLobbyState | null; run: Public
         <div>
           <p className="section-title">Cap Mode</p>
           <p className="eyebrow">
-            ${run?.budgetLeft ?? state?.capAmount ?? 88} left · ${run?.capSpent ?? 0} spent · ${state?.capAmount ?? 88} {state?.capType ?? "hard"} cap
+            ${run?.budgetLeft ?? state?.capAmount ?? HARD_CAP_AMOUNT} left · ${run?.capSpent ?? 0} spent · ${state?.capAmount ?? HARD_CAP_AMOUNT} {state?.capType ?? "hard"} cap
           </p>
         </div>
         <div className="segmented">
@@ -399,7 +399,7 @@ function BoardPanel({
       {candidates.length ? (
         <>
           <div className="filters panel-pad">
-            <div className="segmented">
+            <div className="position-filter-row" aria-label="Position filters">
               {(["All", ...POSITIONS] as const).map((slot) => (
                 <button className={`btn ${position === slot ? "primary" : ""}`} type="button" key={slot} onClick={() => setPosition(slot)}>
                   {slot}

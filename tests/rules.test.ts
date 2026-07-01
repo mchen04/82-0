@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { loadGamePack } from "../lib/game-data";
-import { CAP_AMOUNT, isLegalCost, maxLegalCost, scoreLineup, salary } from "../lib/rules";
+import { capAmountFor, HARD_CAP_AMOUNT, isLegalCost, maxLegalCost, scoreLineup, SOFT_CAP_AMOUNT, salary } from "../lib/rules";
 
 test("salary is deterministic and bounded for public game data", () => {
   const players = loadGamePack().players.slice(0, 250);
@@ -15,9 +15,14 @@ test("salary is deterministic and bounded for public game data", () => {
 });
 
 test("hard cap reserves minimum budget for remaining lineup slots", () => {
-  assert.equal(maxLegalCost("hard", CAP_AMOUNT, 70, 3), 15);
-  assert.equal(isLegalCost(15, "hard", CAP_AMOUNT, 70, 3), true);
-  assert.equal(isLegalCost(16, "hard", CAP_AMOUNT, 70, 3), false);
+  assert.equal(maxLegalCost("hard", HARD_CAP_AMOUNT, 70, 3), 15);
+  assert.equal(isLegalCost(15, "hard", HARD_CAP_AMOUNT, 70, 3), true);
+  assert.equal(isLegalCost(16, "hard", HARD_CAP_AMOUNT, 70, 3), false);
+});
+
+test("cap type selects the correct budget", () => {
+  assert.equal(capAmountFor("hard"), 88);
+  assert.equal(capAmountFor("soft"), 100);
 });
 
 test("soft cap permits overspend and applies deterministic win penalty", () => {
@@ -29,8 +34,8 @@ test("soft cap permits overspend and applies deterministic win penalty", () => {
     pack.players.find((player) => player.positions.includes("PF"))!,
     pack.players.find((player) => player.positions.includes("C"))!,
   ];
-  const hardish = scoreLineup(lineup, "hard", CAP_AMOUNT, CAP_AMOUNT);
-  const soft = scoreLineup(lineup, "soft", CAP_AMOUNT, CAP_AMOUNT + 8);
+  const hardish = scoreLineup(lineup, "hard", HARD_CAP_AMOUNT, HARD_CAP_AMOUNT);
+  const soft = scoreLineup(lineup, "soft", SOFT_CAP_AMOUNT, SOFT_CAP_AMOUNT + 8);
   assert.equal(typeof hardish.wins, "number");
   assert.equal(soft.softOverspend, 8);
   assert.equal(soft.softPenaltyWins, 4);

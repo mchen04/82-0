@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getPool, type DbClient, query, withTransaction } from "./db";
 import { AppError } from "./errors";
 import { getLocalPlayer } from "./game-data";
-import { CAP_AMOUNT, isLegalCost, maxLegalCost, openPositions, scoreLineup, selectedPlayerIds, slotCount, toLineupSlot } from "./rules";
+import { capAmountFor, isLegalCost, maxLegalCost, openPositions, scoreLineup, selectedPlayerIds, slotCount, toLineupSlot } from "./rules";
 import { id, lobbyCode, pickRandom, secretToken } from "./random";
 import { POSITIONS, type Candidate, type CapType, type Lineup, type LobbyMode, type PlayerSeason, type Position, type PublicLobbyState, type PublicMatch, type PublicRun, type Spin } from "./types";
 
@@ -106,7 +106,7 @@ export async function createLobby(input: CreateLobbyInput) {
     await client.query(
       `INSERT INTO lobbies(id, code, mode, cap_type, cap_amount, status, rerolls_enabled, host_player_id)
        VALUES ($1, $2, $3, $4, $5, 'lobby', $6, $7)`,
-      [lobbyId, code, parsed.mode, parsed.capType, CAP_AMOUNT, parsed.rerollsEnabled, playerId],
+      [lobbyId, code, parsed.mode, parsed.capType, capAmountFor(parsed.capType), parsed.rerollsEnabled, playerId],
     );
     await client.query(
       `INSERT INTO lobby_players(id, lobby_id, name, token) VALUES ($1, $2, $3, $4)`,
@@ -280,12 +280,13 @@ async function updateSettings(client: PoolClient, lobby: LobbyRow, actor: LobbyP
   }
   const mode = parsed.mode ?? lobby.mode;
   const capType = parsed.capType ?? lobby.cap_type;
+  const capAmount = capAmountFor(capType);
   const rerolls = parsed.rerollsEnabled ?? lobby.rerolls_enabled;
   await client.query(
-    `UPDATE lobbies SET mode = $2, cap_type = $3, rerolls_enabled = $4, updated_at = now() WHERE id = $1`,
-    [lobby.id, mode, capType, rerolls],
+    `UPDATE lobbies SET mode = $2, cap_type = $3, cap_amount = $4, rerolls_enabled = $5, updated_at = now() WHERE id = $1`,
+    [lobby.id, mode, capType, capAmount, rerolls],
   );
-  await recordEvent(client, lobby.id, null, actor.id, "settings.updated", { mode, capType, rerollsEnabled: rerolls });
+  await recordEvent(client, lobby.id, null, actor.id, "settings.updated", { mode, capType, capAmount, rerollsEnabled: rerolls });
 }
 
 async function startMatch(client: PoolClient, lobby: LobbyRow, actor: LobbyPlayerRow) {
