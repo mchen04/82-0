@@ -16,7 +16,7 @@ import {
   type SortKey,
 } from "@/lib/types";
 
-type ActionName = "settings" | "start" | "spin" | "reroll-team" | "reroll-decade" | "pick" | "next-match";
+type ActionName = "settings" | "start" | "spin" | "reroll-team" | "reroll-decade" | "pick" | "move-pick" | "next-match";
 
 function tokenKey(code: string) {
   return `better82:${code.toUpperCase()}:token`;
@@ -36,6 +36,7 @@ export function LobbyApp({ code }: { code: string }) {
   const [name, setName] = useState("Friend");
   const [state, setState] = useState<PublicLobbyState | null>(null);
   const [selected, setSelected] = useState<Candidate | null>(null);
+  const [movingPosition, setMovingPosition] = useState<Position | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
@@ -94,6 +95,7 @@ export function LobbyApp({ code }: { code: string }) {
   const visibleRun = viewerRun ?? currentRun;
   const activeSpin = activeMatch?.mode === "snake" ? activeMatch.currentSpin : viewerRun?.currentSpin ?? null;
   const showDraftLayout = Boolean(token && activeMatch && state?.status !== "lobby");
+  const canEditLineup = canAct && !busy && viewerRun?.status === "active";
   const capStatusPanel = <CapStatus state={state} run={visibleRun} />;
   const spinPanel = (
     <SpinPanel
@@ -112,7 +114,10 @@ export function LobbyApp({ code }: { code: string }) {
       run={currentRun}
       viewerRun={viewerRun}
       selected={selected}
-      setSelected={setSelected}
+      setSelected={(candidate) => {
+        setSelected(candidate);
+        if (candidate) setMovingPosition(null);
+      }}
       canAct={canAct}
       busy={busy}
       onPick={(position) => selected && action("pick", { playerSeasonId: selected.id, position })}
@@ -153,6 +158,7 @@ export function LobbyApp({ code }: { code: string }) {
       if (!response.ok) throw new Error(data.message ?? "Action failed.");
       setState(data);
       setSelected(null);
+      setMovingPosition(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Action failed.");
       await load().catch(() => undefined);
@@ -221,7 +227,18 @@ export function LobbyApp({ code }: { code: string }) {
         <aside className="side">
           {state ? (
             <>
-              <Court lineup={viewerRun?.lineup ?? {}} selected={selected} canAct={canAct} onPick={(position) => selected && action("pick", { playerSeasonId: selected.id, position })} />
+              <Court
+                lineup={viewerRun?.lineup ?? {}}
+                selected={selected}
+                movingPosition={movingPosition}
+                canAct={canEditLineup}
+                onPick={(position) => selected && action("pick", { playerSeasonId: selected.id, position })}
+                onStartMove={(position) => {
+                  setSelected(null);
+                  setMovingPosition(position);
+                }}
+                onMove={(fromPosition, position) => action("move-pick", { fromPosition, position })}
+              />
               {!showDraftLayout ? <Opponents state={state} /> : null}
               <Standings state={state} onNext={() => action("next-match")} isHost={isHost} busy={busy} />
               {!showDraftLayout ? <Events state={state} /> : null}
@@ -231,7 +248,18 @@ export function LobbyApp({ code }: { code: string }) {
       </section>
 
       {state?.activeMatch ? (
-        <MobileLineup lineup={viewerRun?.lineup ?? {}} selected={selected} canAct={canAct} onPick={(position) => selected && action("pick", { playerSeasonId: selected.id, position })} />
+        <MobileLineup
+          lineup={viewerRun?.lineup ?? {}}
+          selected={selected}
+          movingPosition={movingPosition}
+          canAct={canEditLineup}
+          onPick={(position) => selected && action("pick", { playerSeasonId: selected.id, position })}
+          onStartMove={(position) => {
+            setSelected(null);
+            setMovingPosition(position);
+          }}
+          onMove={(fromPosition, position) => action("move-pick", { fromPosition, position })}
+        />
       ) : null}
     </main>
   );
@@ -567,22 +595,70 @@ function ResultPanel({ run }: { run: PublicRun | null }) {
   );
 }
 
-function Court({ lineup, selected, canAct, onPick }: { lineup: Partial<Record<Position, LineupSlot>>; selected: Candidate | null; canAct: boolean; onPick: (position: Position) => void }) {
+type LineupPickerProps = {
+  lineup: Partial<Record<Position, LineupSlot>>;
+  selected: Candidate | null;
+  movingPosition: Position | null;
+  canAct: boolean;
+  onPick: (position: Position) => void;
+  onStartMove: (position: Position) => void;
+  onMove: (fromPosition: Position, position: Position) => void;
+};
+
+function canMoveFrom(lineup: Partial<Record<Position, LineupSlot>>, position: Position) {
+  const slot = lineup[position];
+  return Boolean(slot?.positions.some((target) => target !== position && !lineup[target]));
+}
+
+function Court({ lineup, selected, movingPosition, canAct, onPick, onStartMove, onMove }: LineupPickerProps) {
+  const movingSlot = movingPosition ? lineup[movingPosition] : undefined;
+
   return (
     <section className="court">
       {POSITIONS.map((position) => {
         const slot = lineup[position];
-        const available = Boolean(canAct && selected?.openPositions.includes(position) && !slot);
+        const pickTarget = Boolean(canAct && selected?.openPositions.includes(position) && !slot);
+        const moveTarget = Boolean(canAct && movingPosition && movingSlot?.positions.includes(position) && !slot);
+        const moveSource = Boolean(canAct && slot && canMoveFrom(lineup, position));
+        const available = pickTarget || moveTarget;
         const details = slot ? slotDetails(slot) : undefined;
         return (
           <button
-            className={`court-slot ${position} ${slot ? "filled" : ""} ${available ? "available" : ""}`}
+            className={`court-slot ${position} ${slot ? "filled" : ""} ${available ? "available" : ""} ${moveSource ? "move-source" : ""} ${movingPosition === position ? "moving" : ""}`}
             type="button"
             key={position}
             disabled={!available && !slot}
-            aria-disabled={!available}
-            onClick={available ? () => onPick(position) : undefined}
-            title={details}
+            aria-disabled={!available && !moveSource}
+            aria-label={details ?? `${position} slot`}
+            draggable={moveSource}
+            onClick={moveTarget && movingPosition ? () => onMove(movingPosition, position) : pickTarget ? () => onPick(position) : moveSource ? () => onStartMove(position) : undefined}
+            onDragStart={
+              moveSource
+                ? (event) => {
+                    event.dataTransfer.effectAllowed = "move";
+                    event.dataTransfer.setData("text/plain", position);
+                    onStartMove(position);
+                  }
+                : undefined
+            }
+            onDragOver={
+              moveTarget
+                ? (event) => {
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = "move";
+                  }
+                : undefined
+            }
+            onDrop={
+              moveTarget
+                ? (event) => {
+                    event.preventDefault();
+                    const fromPosition = event.dataTransfer.getData("text/plain");
+                    if (POSITIONS.includes(fromPosition as Position)) onMove(fromPosition as Position, position);
+                    else if (movingPosition) onMove(movingPosition, position);
+                  }
+                : undefined
+            }
             data-tooltip={details}
             data-testid={`court-slot-${position}`}
           >
@@ -606,29 +682,34 @@ function Court({ lineup, selected, canAct, onPick }: { lineup: Partial<Record<Po
 function PlayerInitials({ slot, className, children }: { slot: LineupSlot; className: string; children: ReactNode }) {
   const details = slotDetails(slot);
   return (
-    <span className={`${className} initials-tooltip`} title={details} data-tooltip={details}>
+    <span className={`${className} initials-tooltip`} aria-label={details} data-tooltip={details}>
       {children}
     </span>
   );
 }
 
-function MobileLineup({ lineup, selected, canAct, onPick }: { lineup: Partial<Record<Position, LineupSlot>>; selected: Candidate | null; canAct: boolean; onPick: (position: Position) => void }) {
+function MobileLineup({ lineup, selected, movingPosition, canAct, onPick, onStartMove, onMove }: LineupPickerProps) {
+  const movingSlot = movingPosition ? lineup[movingPosition] : undefined;
+
   return (
     <section className="mobile-lineup" data-testid="mobile-lineup-strip">
       <div className="mobile-slots">
         {POSITIONS.map((position) => {
           const slot = lineup[position];
-          const available = Boolean(canAct && selected?.openPositions.includes(position) && !slot);
+          const pickTarget = Boolean(canAct && selected?.openPositions.includes(position) && !slot);
+          const moveTarget = Boolean(canAct && movingPosition && movingSlot?.positions.includes(position) && !slot);
+          const moveSource = Boolean(canAct && slot && canMoveFrom(lineup, position));
+          const available = pickTarget || moveTarget;
           const details = slot ? slotDetails(slot) : undefined;
           return (
             <button
-              className={`mobile-slot ${slot ? "filled" : ""} ${available ? "available" : ""}`}
+              className={`mobile-slot ${slot ? "filled" : ""} ${available ? "available" : ""} ${moveSource ? "move-source" : ""} ${movingPosition === position ? "moving" : ""}`}
               type="button"
               key={position}
               disabled={!available && !slot}
-              aria-disabled={!available}
-              onClick={available ? () => onPick(position) : undefined}
-              title={details}
+              aria-disabled={!available && !moveSource}
+              aria-label={details ?? `${position} slot`}
+              onClick={moveTarget && movingPosition ? () => onMove(movingPosition, position) : pickTarget ? () => onPick(position) : moveSource ? () => onStartMove(position) : undefined}
               data-testid={`mobile-slot-${position}`}
             >
               {slot ? (

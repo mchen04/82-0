@@ -11,7 +11,8 @@
     "db:setup": "tsx scripts/setup-db.ts",
     "db:reset": "tsx scripts/reset-db.ts",
     "verify:flows": "tsx scripts/verify-flows.ts",
-    "verify": "npm run typecheck && npm test && npm run build && npm run verify:flows"
+    "verify:lineup-ui": "tsx scripts/verify-lineup-ui.ts",
+    "verify": "npm run typecheck && npm test && npm run verify:flows && npm run verify:lineup-ui && npm run build"
   },
   "description": "Friends-only multiplayer Better 82-0 Cap Mode.",
   "dependencies": {

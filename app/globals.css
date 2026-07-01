@@ -657,6 +657,19 @@ a {
   cursor: default;
 }
 
+.court-slot.move-source {
+  cursor: grab;
+}
+
+.court-slot.move-source:active {
+  cursor: grabbing;
+}
+
+.court-slot.moving .court-initials {
+  border-color: var(--orange);
+  box-shadow: 0 0 0 4px rgba(233, 87, 43, 0.32), 4px 4px 0 rgba(0, 0, 0, 0.45);
+}
+
 .court-initials {
   position: relative;
   z-index: 2;
@@ -765,6 +778,15 @@ a {
   border-color: var(--ink);
   background: var(--ink);
   cursor: default;
+}
+
+.mobile-slot.move-source {
+  cursor: pointer;
+}
+
+.mobile-slot.moving {
+  border-color: var(--orange);
+  box-shadow: 0 0 0 4px rgba(233, 87, 43, 0.22);
 }
 
 .mobile-slot strong {
