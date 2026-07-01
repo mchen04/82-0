@@ -7,3 +7,4 @@ notes: created by loopctl
 |---|---|---|---|---|---|---|
 | 1 | BLOCK | 2/9/2 | 4 | 499 | pass | lifecycle retention, safer seeding, non-locking reads, JSON parsing, cleanup route/script, lifecycle tests, split lobby persistence/serialization, split lineup UI components, trimmed event payloads, cached snake selected ids |
 | 2 | BLOCK | 0/1/0 | 1 | 562 | pass | conditional lobby polling with 204 unchanged responses, token-aware client cache, verifier state-version fixture bumps |
+| 3 | BLOCK | 0/1/0 | 1 | 565 | pass | cleanup cron fails closed in production when CRON_SECRET is missing |
