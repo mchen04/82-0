@@ -5,4 +5,4 @@ notes: created by loopctl
 
 | # | verdict | findings | commits | loc_delta | tests | notes |
 |---|---|---|---|---|---|---|
-| 1 | BLOCK | 2/9/2 | 3 | 500 | pass | lifecycle retention, safer seeding, non-locking reads, JSON parsing, cleanup route/script, lifecycle tests, split lobby persistence/serialization, split lineup UI components |
+| 1 | BLOCK | 2/9/2 | 4 | 499 | pass | lifecycle retention, safer seeding, non-locking reads, JSON parsing, cleanup route/script, lifecycle tests, split lobby persistence/serialization, split lineup UI components, trimmed event payloads, cached snake selected ids |

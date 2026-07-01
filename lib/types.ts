@@ -161,7 +161,6 @@ export type PublicEvent = {
   id: string;
   playerId: string | null;
   type: string;
-  payload: Record<string, unknown>;
   createdAt: string;
 };
 

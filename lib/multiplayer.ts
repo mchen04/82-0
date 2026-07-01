@@ -131,10 +131,9 @@ export async function getLobbyState(code: string, token?: string | null): Promis
       id: string;
       player_id: string | null;
       type: string;
-      payload: Record<string, unknown>;
       created_at: Date;
     }>(
-      `SELECT id, player_id, type, payload, created_at FROM events WHERE lobby_id = $1 ORDER BY created_at DESC LIMIT 30`,
+      `SELECT id, player_id, type, created_at FROM events WHERE lobby_id = $1 ORDER BY created_at DESC LIMIT 30`,
       [lobby.id],
     );
 
@@ -168,7 +167,6 @@ export async function getLobbyState(code: string, token?: string | null): Promis
         id: event.id,
         playerId: event.player_id,
         type: event.type,
-        payload: event.payload,
         createdAt: event.created_at.toISOString(),
       })),
     };
@@ -373,8 +371,8 @@ async function applySnakeAction(client: PoolClient, lobby: LobbyRow, match: Matc
   throw new AppError(400, "invalid_action", "That action is not valid for Shared Snake Draft.");
 }
 
-async function chooseLegalSpin(client: PoolClient, lobby: LobbyRow, match: MatchRow, run: RunRow, shared: boolean) {
-  const options = await legalTeamEras(client, lobby, match, run, shared);
+async function chooseLegalSpin(client: PoolClient, lobby: LobbyRow, match: MatchRow, run: RunRow, shared: boolean, sharedSelectedIds?: string[]) {
+  const options = await legalTeamEras(client, lobby, match, run, shared, sharedSelectedIds);
   if (options.length === 0) {
     await loseRun(client, lobby, match.id, run.id, run.player_id, "No legal affordable pick remains.");
     throw new AppError(409, "no_legal_pick", "No legal affordable pick remains.");
@@ -525,11 +523,11 @@ async function movePick(
   return { ...run, lineup };
 }
 
-async function autoLoseIfNoLegalPick(client: PoolClient, lobby: LobbyRow, match: MatchRow, run: RunRow, shared: boolean) {
+async function autoLoseIfNoLegalPick(client: PoolClient, lobby: LobbyRow, match: MatchRow, run: RunRow, shared: boolean, sharedSelectedIds?: string[]) {
   if (run.status !== "active") return;
   if (slotCount(run.lineup) >= 5) return;
   if (lobby.cap_type !== "hard") return;
-  const options = await legalTeamEras(client, lobby, match, run, shared);
+  const options = await legalTeamEras(client, lobby, match, run, shared, sharedSelectedIds);
   if (options.length === 0) {
     await loseRun(client, lobby, match.id, run.id, run.player_id, "No legal affordable pick remains.");
   }
@@ -551,10 +549,10 @@ async function loseRun(client: PoolClient, lobby: LobbyRow, matchId: string, run
   await recordEvent(client, lobby.id, matchId, playerId, "run.lost", { reason });
 }
 
-async function legalTeamEras(client: PoolClient, lobby: LobbyRow, match: MatchRow, run: RunRow, shared: boolean): Promise<Spin[]> {
+async function legalTeamEras(client: PoolClient, lobby: LobbyRow, match: MatchRow, run: RunRow, shared: boolean, sharedSelectedIds?: string[]): Promise<Spin[]> {
   const open = openPositions(run.lineup);
   if (open.length === 0) return [];
-  const excluded = shared ? await selectedIdsForMatch(client, match.id) : selectedPlayerIds(run.lineup);
+  const excluded = shared ? sharedSelectedIds ?? await selectedIdsForMatch(client, match.id) : selectedPlayerIds(run.lineup);
   const maxCost = maxLegalCost(lobby.cap_type, lobby.cap_amount, run.cap_spent, slotCount(run.lineup));
   if (maxCost < 3) return [];
   const result = await client.query<Spin>(
@@ -581,15 +579,16 @@ async function advanceSnakeTurn(client: PoolClient, lobby: LobbyRow, matchId: st
 
   for (let guard = 0; guard < match.participant_ids.length * 5 + 5; guard += 1) {
     const runs = await lockRunsForMatch(client, matchId);
+    const sharedSelectedIds = await selectedIdsForMatch(client, match.id);
     if (runs.every((run) => run.status !== "active")) return;
 
     const nextPlayerId = playerForSnakePick(match.participant_ids, match.current_pick_index);
     const run = runs.find((candidate) => candidate.player_id === nextPlayerId);
     if (run && run.status === "active" && slotCount(run.lineup) < 5) {
-      await autoLoseIfNoLegalPick(client, lobby, match, run, true);
+      await autoLoseIfNoLegalPick(client, lobby, match, run, true, sharedSelectedIds);
       const updatedRun = await requireRun(client, matchId, nextPlayerId);
       if (updatedRun.status === "active") {
-        const spin = match.current_spin && await hasLegalPickForSpin(client, lobby, match, updatedRun, match.current_spin, true)
+        const spin = match.current_spin && await hasLegalPickForSpin(client, lobby, match, updatedRun, match.current_spin, true, sharedSelectedIds)
           ? match.current_spin
           : await chooseLegalSnakeSpinForCycle(
             client,
@@ -597,6 +596,7 @@ async function advanceSnakeTurn(client: PoolClient, lobby: LobbyRow, matchId: st
             match,
             runs.map((candidate) => candidate.player_id === updatedRun.player_id ? updatedRun : candidate),
             updatedRun,
+            sharedSelectedIds,
           );
         await client.query(
           `UPDATE matches SET current_turn_player_id = $2, current_spin = $3::jsonb WHERE id = $1`,
@@ -619,7 +619,7 @@ async function advanceSnakeTurn(client: PoolClient, lobby: LobbyRow, matchId: st
   }
 }
 
-async function chooseLegalSnakeSpinForCycle(client: PoolClient, lobby: LobbyRow, match: MatchRow, runs: RunRow[], currentRun: RunRow) {
+async function chooseLegalSnakeSpinForCycle(client: PoolClient, lobby: LobbyRow, match: MatchRow, runs: RunRow[], currentRun: RunRow, sharedSelectedIds: string[]) {
   let commonOptions: Map<string, Spin> | null = null;
   const remainingPlayerIds = remainingSnakeCyclePlayerIds(match.participant_ids, match.current_pick_index);
   const pendingRuns: RunRow[] = [];
@@ -629,7 +629,7 @@ async function chooseLegalSnakeSpinForCycle(client: PoolClient, lobby: LobbyRow,
   }
 
   for (const run of pendingRuns) {
-    const options = new Map<string, Spin>((await legalTeamEras(client, lobby, match, run, true)).map((spin) => [spinKey(spin), spin]));
+    const options = new Map<string, Spin>((await legalTeamEras(client, lobby, match, run, true, sharedSelectedIds)).map((spin) => [spinKey(spin), spin]));
     if (!commonOptions) {
       commonOptions = options;
       continue;
@@ -643,13 +643,13 @@ async function chooseLegalSnakeSpinForCycle(client: PoolClient, lobby: LobbyRow,
   }
 
   const common = [...(commonOptions?.values() ?? [])];
-  return common.length ? pickRandom(common) : chooseLegalSpin(client, lobby, match, currentRun, true);
+  return common.length ? pickRandom(common) : chooseLegalSpin(client, lobby, match, currentRun, true, sharedSelectedIds);
 }
 
-async function hasLegalPickForSpin(client: DbClient, lobby: LobbyRow, match: MatchRow, run: RunRow, spin: Spin, shared: boolean) {
+async function hasLegalPickForSpin(client: DbClient, lobby: LobbyRow, match: MatchRow, run: RunRow, spin: Spin, shared: boolean, sharedSelectedIds?: string[]) {
   const open = openPositions(run.lineup);
   if (open.length === 0) return false;
-  const excluded = shared ? await selectedIdsForMatch(client, match.id) : selectedPlayerIds(run.lineup);
+  const excluded = shared ? sharedSelectedIds ?? await selectedIdsForMatch(client, match.id) : selectedPlayerIds(run.lineup);
   const maxCost = maxLegalCost(lobby.cap_type, lobby.cap_amount, run.cap_spent, slotCount(run.lineup));
   if (maxCost < 3) return false;
   const result = await client.query(
