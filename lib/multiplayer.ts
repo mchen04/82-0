@@ -330,6 +330,7 @@ async function applyParallelAction(client: PoolClient, lobby: LobbyRow, match: M
   }
 
   if (parsed.action === "reroll-team" || parsed.action === "reroll-decade") {
+    if (!lobby.rerolls_enabled) throw new AppError(409, "rerolls_disabled", "Rerolls are disabled for this draft.");
     await rerollRunSpin(client, lobby, match, freshRun, actor.id, parsed.action === "reroll-team" ? "team" : "decade", false);
     return;
   }

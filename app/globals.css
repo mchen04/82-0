@@ -874,6 +874,55 @@ a {
   background: var(--orange);
 }
 
+.progress-details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.4rem;
+  margin-top: 0.65rem;
+}
+
+.progress-detail:first-child {
+  grid-column: 1 / -1;
+}
+
+.progress-detail {
+  min-width: 0;
+  border: 2px solid #e5e5e5;
+  background: #fafafa;
+  padding: 0.4rem;
+}
+
+.progress-detail span {
+  display: block;
+  color: var(--muted);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.58rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.progress-detail strong {
+  display: block;
+  min-width: 0;
+  margin-top: 0.18rem;
+  color: var(--ink);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.66rem;
+  font-weight: 900;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+  text-transform: uppercase;
+}
+
+.progress-detail.used {
+  border-color: #fed7aa;
+  background: #fff7ed;
+}
+
+.progress-detail.used strong {
+  color: var(--orange-dark);
+}
+
 .lineup-mini {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));

@@ -397,7 +397,7 @@ function SpinPanel({
   const localRun = match?.mode === "parallel" ? viewerRun : run;
   const isSnake = match?.mode === "snake";
   const spinDisabled = busy || !canAct || Boolean(spin) || Boolean(isSnake);
-  const rerollsAllowed = !isSnake || state?.rerollsEnabled;
+  const rerollsAllowed = Boolean(state?.rerollsEnabled);
 
   return (
     <section className="panel chalk panel-pad">
@@ -418,11 +418,11 @@ function SpinPanel({
       <div className="spin-actions">
         <button className="btn" type="button" disabled={busy || !canAct || !spin || !rerollsAllowed || Boolean(localRun?.teamRerollUsed)} onClick={() => onAction("reroll-team")}>
           <Shuffle size={15} />
-          Team {localRun?.teamRerollUsed ? "used" : "1"}
+          Team {localRun?.teamRerollUsed ? "used" : rerollsAllowed ? "1" : "off"}
         </button>
         <button className="btn" type="button" disabled={busy || !canAct || !spin || !rerollsAllowed || Boolean(localRun?.decadeRerollUsed)} onClick={() => onAction("reroll-decade")}>
           <Shuffle size={15} />
-          Decade {localRun?.decadeRerollUsed ? "used" : "1"}
+          Decade {localRun?.decadeRerollUsed ? "used" : rerollsAllowed ? "1" : "off"}
         </button>
         <button className="btn primary" type="button" disabled={spinDisabled} onClick={() => onAction("spin")}>
           <Shuffle size={15} />
