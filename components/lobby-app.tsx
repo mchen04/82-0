@@ -227,7 +227,6 @@ export function LobbyApp({ code }: { code: string }) {
               {error ? <div className="error">{error}</div> : null}
               {capStatusPanel}
               {spinPanel}
-              {state ? <Opponents state={state} /> : null}
             </div>
             <div className="draft-board">{boardPanel}</div>
           </>
@@ -248,7 +247,7 @@ export function LobbyApp({ code }: { code: string }) {
           </div>
         )}
 
-        <aside className="side">
+        <aside className={`side ${showDraftLayout ? "draft-lineup" : ""}`}>
           {state ? (
             <>
               <Court
@@ -265,10 +264,16 @@ export function LobbyApp({ code }: { code: string }) {
                 onMove={(fromPosition, position) => action("move-pick", { fromPosition, position })}
               />
               {!showDraftLayout ? <Opponents state={state} /> : null}
-              <Standings state={state} onNext={() => action("next-match")} isHost={isHost} busy={busy} />
+              {!showDraftLayout ? <Standings state={state} onNext={() => action("next-match")} isHost={isHost} busy={busy} /> : null}
             </>
           ) : null}
         </aside>
+
+        {showDraftLayout && state ? (
+          <aside className="draft-players">
+            <Opponents state={state} showStandings onNext={() => action("next-match")} isHost={isHost} busy={busy} />
+          </aside>
+        ) : null}
       </section>
 
       {state?.activeMatch ? (
