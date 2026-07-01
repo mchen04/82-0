@@ -386,7 +386,14 @@ async function applySnakeAction(client: PoolClient, lobby: LobbyRow, match: Matc
   if (parsed.action === "pick") {
     if (!currentSpin) throw new AppError(409, "spin_required", "Spin before picking.");
     await placePick(client, lobby, match, { ...run, current_spin: currentSpin }, actor.id, parsed.playerSeasonId, parsed.position, true);
-    await client.query(`UPDATE matches SET current_pick_index = current_pick_index + 1 WHERE id = $1`, [match.id]);
+    const nextPickIndex = match.current_pick_index + 1;
+    await client.query(
+      `UPDATE matches
+       SET current_pick_index = $2,
+           current_spin = CASE WHEN $3 THEN null ELSE current_spin END
+       WHERE id = $1`,
+      [match.id, nextPickIndex, snakePickStartsCycle(match.participant_ids, nextPickIndex)],
+    );
     await advanceSnakeTurn(client, lobby, match.id);
     return;
   }
@@ -510,10 +517,6 @@ async function placePick(
     await autoLoseIfNoLegalPick(client, lobby, match, { ...run, lineup, cap_spent: capSpent, current_spin: null }, shared);
   }
 
-  if (shared) {
-    await client.query(`UPDATE matches SET current_spin = null WHERE id = $1`, [match.id]);
-  }
-
   await recordEvent(client, lobby.id, match.id, playerId, "pick.made", { player: player.player_name, position, cost: player.cost });
 }
 
@@ -627,7 +630,15 @@ async function advanceSnakeTurn(client: PoolClient, lobby: LobbyRow, matchId: st
       await autoLoseIfNoLegalPick(client, lobby, match, run, true);
       const updatedRun = await requireRun(client, matchId, nextPlayerId);
       if (updatedRun.status === "active") {
-        const spin = await chooseLegalSpin(client, lobby, match, updatedRun, true);
+        const spin = match.current_spin && await hasLegalPickForSpin(client, lobby, match, updatedRun, match.current_spin, true)
+          ? match.current_spin
+          : await chooseLegalSnakeSpinForCycle(
+            client,
+            lobby,
+            match,
+            runs.map((candidate) => candidate.player_id === updatedRun.player_id ? updatedRun : candidate),
+            updatedRun,
+          );
         await client.query(
           `UPDATE matches SET current_turn_player_id = $2, current_spin = $3::jsonb WHERE id = $1`,
           [matchId, nextPlayerId, JSON.stringify(spin)],
@@ -636,9 +647,73 @@ async function advanceSnakeTurn(client: PoolClient, lobby: LobbyRow, matchId: st
       }
     }
 
-    await client.query(`UPDATE matches SET current_pick_index = current_pick_index + 1, current_spin = null WHERE id = $1`, [matchId]);
+    const nextPickIndex = match.current_pick_index + 1;
+    await client.query(
+      `UPDATE matches
+       SET current_pick_index = $2,
+           current_spin = CASE WHEN $3 THEN null ELSE current_spin END
+       WHERE id = $1`,
+      [matchId, nextPickIndex, snakePickStartsCycle(match.participant_ids, nextPickIndex)],
+    );
     match = (await client.query<MatchRow>(`SELECT * FROM matches WHERE id = $1 FOR UPDATE`, [matchId])).rows[0];
   }
+}
+
+async function chooseLegalSnakeSpinForCycle(client: PoolClient, lobby: LobbyRow, match: MatchRow, runs: RunRow[], currentRun: RunRow) {
+  let commonOptions: Map<string, Spin> | null = null;
+  const remainingPlayerIds = remainingSnakeCyclePlayerIds(match.participant_ids, match.current_pick_index);
+  const pendingRuns: RunRow[] = [];
+  for (const playerId of remainingPlayerIds) {
+    const run = runs.find((candidate) => candidate.player_id === playerId);
+    if (run && run.status === "active" && slotCount(run.lineup) < 5) pendingRuns.push(run);
+  }
+
+  for (const run of pendingRuns) {
+    const options = new Map<string, Spin>((await legalTeamEras(client, lobby, match, run, true)).map((spin) => [spinKey(spin), spin]));
+    if (!commonOptions) {
+      commonOptions = options;
+      continue;
+    }
+
+    const intersection = new Map<string, Spin>();
+    for (const [key, spin] of commonOptions) {
+      if (options.has(key)) intersection.set(key, spin);
+    }
+    commonOptions = intersection;
+  }
+
+  const common = [...(commonOptions?.values() ?? [])];
+  return common.length ? pickRandom(common) : chooseLegalSpin(client, lobby, match, currentRun, true);
+}
+
+async function hasLegalPickForSpin(client: DbClient, lobby: LobbyRow, match: MatchRow, run: RunRow, spin: Spin, shared: boolean) {
+  const open = openPositions(run.lineup);
+  if (open.length === 0) return false;
+  const excluded = shared ? await selectedIdsForMatch(client, match.id) : selectedPlayerIds(run.lineup);
+  const maxCost = maxLegalCost(lobby.cap_type, lobby.cap_amount, run.cap_spent, slotCount(run.lineup));
+  if (maxCost < 3) return false;
+  const result = await client.query(
+    `SELECT 1
+     FROM player_seasons
+     WHERE team = $1
+       AND era = $2
+       AND NOT (player_id = ANY($3::text[]))
+       AND positions && $4::text[]
+       AND ($5::boolean = true OR cost <= $6)
+     LIMIT 1`,
+    [spin.team, spin.era, excluded, open, lobby.cap_type === "soft", Number.isFinite(maxCost) ? maxCost : 999],
+  );
+  return (result.rowCount ?? 0) > 0;
+}
+
+function remainingSnakeCyclePlayerIds(participantIds: string[], pickIndex: number) {
+  if (participantIds.length === 0) return [];
+  const cycleEnd = (Math.floor(pickIndex / participantIds.length) + 1) * participantIds.length;
+  const playerIds: string[] = [];
+  for (let index = pickIndex; index < cycleEnd; index += 1) {
+    playerIds.push(playerForSnakePick(participantIds, index));
+  }
+  return playerIds;
 }
 
 function playerForSnakePick(participantIds: string[], pickIndex: number) {
@@ -646,6 +721,14 @@ function playerForSnakePick(participantIds: string[], pickIndex: number) {
   const round = Math.floor(pickIndex / count);
   const offset = pickIndex % count;
   return round % 2 === 0 ? participantIds[offset] : participantIds[count - 1 - offset];
+}
+
+function snakePickStartsCycle(participantIds: string[], pickIndex: number) {
+  return participantIds.length > 0 && pickIndex % participantIds.length === 0;
+}
+
+function spinKey(spin: Spin) {
+  return `${spin.team}\t${spin.era}`;
 }
 
 async function maybeCompleteMatch(client: PoolClient, lobby: LobbyRow, matchId: string) {
