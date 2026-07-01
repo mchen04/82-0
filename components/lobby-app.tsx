@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, Copy, Crown, Play, Shuffle, Swords, Trophy } from "lucide-react";
 import { Header } from "./home-app";
+import { playerStatDetails } from "@/lib/player-details";
 import { formatStat, HARD_CAP_AMOUNT, SOFT_CAP_AMOUNT } from "@/lib/rules";
-import { Court, Events, MobileLineup, Opponents, Standings } from "./lobby-lineup";
+import { Court, MobileLineup, Opponents, Standings } from "./lobby-lineup";
 import {
   POSITIONS,
   type Candidate,
@@ -228,7 +229,6 @@ export function LobbyApp({ code }: { code: string }) {
               {capStatusPanel}
               {spinPanel}
               {state ? <Opponents state={state} /> : null}
-              {state ? <Events state={state} /> : null}
             </div>
             <div className="draft-board">{boardPanel}</div>
           </>
@@ -261,13 +261,12 @@ export function LobbyApp({ code }: { code: string }) {
                 onPick={(position) => selected && action("pick", { playerSeasonId: selected.id, position })}
                 onStartMove={(position) => {
                   setSelected(null);
-                  setMovingPosition(position);
+                  setMovingPosition((current) => current === position ? null : position);
                 }}
                 onMove={(fromPosition, position) => action("move-pick", { fromPosition, position })}
               />
               {!showDraftLayout ? <Opponents state={state} /> : null}
               <Standings state={state} onNext={() => action("next-match")} isHost={isHost} busy={busy} />
-              {!showDraftLayout ? <Events state={state} /> : null}
             </>
           ) : null}
         </aside>
@@ -283,7 +282,7 @@ export function LobbyApp({ code }: { code: string }) {
           onPick={(position) => selected && action("pick", { playerSeasonId: selected.id, position })}
           onStartMove={(position) => {
             setSelected(null);
-            setMovingPosition(position);
+            setMovingPosition((current) => current === position ? null : position);
           }}
           onMove={(fromPosition, position) => action("move-pick", { fromPosition, position })}
         />
@@ -558,8 +557,9 @@ function BoardPanel({
 }
 
 function CandidateCard({ candidate, active, disabled, onSelect }: { candidate: Candidate; active: boolean; disabled: boolean; onSelect: () => void }) {
+  const details = playerStatDetails(candidate);
   return (
-    <button className={`candidate-button ${active ? "active" : ""}`} type="button" disabled={disabled} onClick={onSelect} data-testid="player-card" data-player-id={candidate.id}>
+    <button className={`candidate-button ${active ? "active" : ""}`} type="button" disabled={disabled} onClick={onSelect} data-testid="player-card" data-player-id={candidate.id} data-tooltip={details} title={details}>
       <div>
         <div className="candidate-top">
           <p className="candidate-name">{candidate.player}</p>

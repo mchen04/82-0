@@ -114,27 +114,34 @@ async function verifyLineupSwap() {
 
 async function verifySnakeOffTurnLineupMove() {
   const host = await createLobby({ name: "Snake Move A", mode: "snake", capType: "hard", rerollsEnabled: true });
-  await joinLobby(host.code, { name: "Snake Move B" });
+  const guest = await joinLobby(host.code, { name: "Snake Move B" });
+  const tokens: TokenSet = {
+    [host.playerId]: host.token,
+    [guest.playerId]: guest.token,
+  };
   let state = await getLobbyState(host.code, host.token);
   state = await applyLobbyAction(host.code, { token: host.token, expectedVersion: state.stateVersion, action: "start" });
 
   const pick = cheapestMovablePick();
   const [fromPosition, toPosition] = pick.player.positions;
   assert.ok(fromPosition && toPosition, "movable player has two positions");
-  assert.ok(state.activeMatch, "snake match exists");
+  const currentPlayerId = state.activeMatch?.currentTurnPlayerId;
+  assert.ok(state.activeMatch && currentPlayerId, "snake match and current drafter exist");
+  const currentToken = tokens[currentPlayerId];
+  assert.ok(currentToken, "current drafter token exists");
   await query(`UPDATE matches SET current_spin = $2::jsonb WHERE id = $1`, [state.activeMatch.id, JSON.stringify({ team: pick.player.team, era: pick.player.era })]);
 
-  state = await getLobbyState(host.code, host.token);
-  assert.equal(state.activeMatch?.currentTurnPlayerId, host.playerId);
+  state = await getLobbyState(host.code, currentToken);
+  assert.equal(state.activeMatch?.currentTurnPlayerId, currentPlayerId);
   assert.ok(state.activeMatch?.candidates.some((candidate) => candidate.id === pick.player.id && candidate.assignable));
-  state = await applyLobbyAction(host.code, { token: host.token, expectedVersion: state.stateVersion, action: "pick", playerSeasonId: pick.player.id, position: fromPosition });
+  state = await applyLobbyAction(host.code, { token: currentToken, expectedVersion: state.stateVersion, action: "pick", playerSeasonId: pick.player.id, position: fromPosition });
 
-  state = await getLobbyState(host.code, host.token);
-  assert.notEqual(state.activeMatch?.currentTurnPlayerId, host.playerId);
-  state = await applyLobbyAction(host.code, { token: host.token, expectedVersion: state.stateVersion, action: "move-pick", fromPosition, position: toPosition });
+  state = await getLobbyState(host.code, currentToken);
+  assert.notEqual(state.activeMatch?.currentTurnPlayerId, currentPlayerId);
+  state = await applyLobbyAction(host.code, { token: currentToken, expectedVersion: state.stateVersion, action: "move-pick", fromPosition, position: toPosition });
 
-  const run = state.activeMatch?.runs.find((candidate) => candidate.playerId === host.playerId);
-  assert.ok(run, "host run exists after off-turn move");
+  const run = state.activeMatch?.runs.find((candidate) => candidate.playerId === currentPlayerId);
+  assert.ok(run, "drafter run exists after off-turn move");
   assert.equal(run.lineup[fromPosition], undefined);
   assert.equal(run.lineup[toPosition]?.playerId, pick.player.id);
 }
