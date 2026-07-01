@@ -202,11 +202,10 @@ export function Opponents({ state }: { state: PublicLobbyState }) {
                   {result.wins}-{result.losses}
                 </strong>
               ) : (
-                <span className="eyebrow">{spinLabel}</span>
+                <span className="eyebrow progress-spin-label">{spinLabel}</span>
               )}
             </div>
             <div className="progress-details">
-              <ProgressDetail label="Spin" value={spinLabel} testId={`progress-spin-${run.playerId}`} />
               <ProgressDetail label="Team reroll" value={rerollStatus(run.teamRerollUsed, rerollsEnabled)} used={run.teamRerollUsed} testId={`progress-team-reroll-${run.playerId}`} />
               <ProgressDetail label="Decade reroll" value={rerollStatus(run.decadeRerollUsed, rerollsEnabled)} used={run.decadeRerollUsed} testId={`progress-decade-reroll-${run.playerId}`} />
             </div>
