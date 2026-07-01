@@ -1,6 +1,8 @@
 import { POSITIONS, type CapType, type Lineup, type LineupSlot, type PlayerSeason, type Position, type ProjectedResult } from "./types";
 
-export const CAP_AMOUNT = 88;
+export const HARD_CAP_AMOUNT = 88;
+export const SOFT_CAP_AMOUNT = 100;
+export const CAP_AMOUNT = HARD_CAP_AMOUNT;
 export const MINIMUM_SLOT_COST = 3;
 
 const clamp = (value: number, min = 0, max = 100) => Math.max(min, Math.min(max, value));
@@ -268,6 +270,10 @@ export function scoreLineup(players: PlayerSeason[], capType: CapType, capAmount
     softOverspend: overspend,
     reasons: [...result.reasons, `Soft cap penalty: -${penalty} wins`],
   };
+}
+
+export function capAmountFor(capType: CapType) {
+  return capType === "soft" ? SOFT_CAP_AMOUNT : HARD_CAP_AMOUNT;
 }
 
 export function openPositions(lineup: Lineup): Position[] {

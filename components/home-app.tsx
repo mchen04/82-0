@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Copy, LogIn, Plus, Shuffle, Trophy } from "lucide-react";
+import { HARD_CAP_AMOUNT, SOFT_CAP_AMOUNT } from "@/lib/rules";
 import type { CapType, LobbyMode } from "@/lib/types";
 
 function tokenKey(code: string) {
@@ -69,7 +70,7 @@ export function HomeApp() {
         <div className="panel chalk panel-pad">
           <p className="section-title">Create or join a lobby</p>
           <p className="small-copy">
-            Hard Cap starts at $88, uses server-side spins and pick validation, and keeps every player synced through the lobby.
+            Hard Cap starts at ${HARD_CAP_AMOUNT}; Soft Cap uses ${SOFT_CAP_AMOUNT} with deterministic overspend penalties.
           </p>
         </div>
 
@@ -102,10 +103,10 @@ export function HomeApp() {
 
           <div className="segmented">
             <button className={`btn ${capType === "hard" ? "green" : ""}`} type="button" onClick={() => setCapType("hard")}>
-              Hard $88
+              Hard ${HARD_CAP_AMOUNT}
             </button>
             <button className={`btn ${capType === "soft" ? "blue" : ""}`} type="button" onClick={() => setCapType("soft")}>
-              Soft $88
+              Soft ${SOFT_CAP_AMOUNT}
             </button>
           </div>
 

@@ -4,18 +4,34 @@ import { createLobby, joinLobby, getLobbyState, applyLobbyAction } from "../lib/
 import { getPool, query } from "../lib/db";
 import { loadGamePack } from "../lib/game-data";
 import { POSITIONS, type Position, type PublicLobbyState } from "../lib/types";
-import { salary } from "../lib/rules";
+import { HARD_CAP_AMOUNT, salary, SOFT_CAP_AMOUNT } from "../lib/rules";
 
 loadEnvConfig(process.cwd());
 
 type TokenSet = Record<string, string>;
 
 async function main() {
+  await verifyCapAmounts();
   await verifyStaleAction();
   await verifyParallelTie();
   await verifySnakeDraft();
   await getPool().end();
   console.log("Flow verification passed.");
+}
+
+async function verifyCapAmounts() {
+  const soft = await createLobby({ name: "Soft Cap", mode: "parallel", capType: "soft", rerollsEnabled: true });
+  const softState = await getLobbyState(soft.code, soft.token);
+  assert.equal(softState.capType, "soft");
+  assert.equal(softState.capAmount, SOFT_CAP_AMOUNT);
+
+  const host = await createLobby({ name: "Cap Toggle", mode: "parallel", capType: "hard", rerollsEnabled: true });
+  let state = await getLobbyState(host.code, host.token);
+  assert.equal(state.capType, "hard");
+  assert.equal(state.capAmount, HARD_CAP_AMOUNT);
+  state = await applyLobbyAction(host.code, { token: host.token, expectedVersion: state.stateVersion, action: "settings", capType: "soft" });
+  assert.equal(state.capType, "soft");
+  assert.equal(state.capAmount, SOFT_CAP_AMOUNT);
 }
 
 async function verifyStaleAction() {

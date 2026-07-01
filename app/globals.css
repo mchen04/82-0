@@ -417,6 +417,20 @@ a {
   text-transform: uppercase;
 }
 
+.position-filter-row {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(2.75rem, 1fr));
+  width: 100%;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding-bottom: 0.15rem;
+}
+
+.position-filter-row .btn {
+  min-width: 2.75rem;
+  padding-inline: 0.65rem;
+}
+
 .spin-actions {
   display: grid;
   grid-template-columns: 1fr 1fr auto;
@@ -836,6 +850,16 @@ a {
 
   .candidate-button {
     grid-template-columns: 1fr auto;
+  }
+
+  .filters {
+    display: grid;
+    grid-template-columns: auto minmax(12rem, 1fr) auto;
+  }
+
+  .position-filter-row {
+    width: auto;
+    min-width: max-content;
   }
 }
 

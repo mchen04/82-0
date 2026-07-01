@@ -9,7 +9,7 @@ Friends-only multiplayer Cap Mode for Better 82-0.
   - Parallel Cap Race: each player builds an independent Cap Mode lineup. Opponent round, spin, reroll, lineup, budget, finish state, and projected record update live.
   - Shared Snake Draft: all players draft from the shared server-selected team/era pool in strict snake order.
 - Uses Hard Cap by default at `$88`.
-- Supports Soft Cap at `$88`, allowing overspend with a deterministic final win penalty.
+- Supports Soft Cap at `$100`, allowing overspend with a deterministic final win penalty.
 - Persists lobbies, lobby players, matches, runs, picks, standings, event history, game state, team eras, and player seasons in Postgres.
 - Keeps server authority over spins, rerolls, picks, placements, scoring, winners, and tiebreakers.
 
