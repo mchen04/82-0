@@ -39,10 +39,14 @@ async function main() {
     await waitForPage(`
       const tooltip = document.querySelector('[data-testid="court-slot-${seed.fromPosition}"] .initials-tooltip');
       const style = getComputedStyle(tooltip, '::after');
-      if (!tooltip?.getAttribute('data-tooltip')?.includes(${JSON.stringify(seed.player)})) throw new Error('tooltip data missing player name');
-      if (!tooltip?.getAttribute('data-tooltip')?.includes('OVR')) throw new Error('tooltip data missing overall');
-      if (!tooltip?.getAttribute('data-tooltip')?.includes('CRE')) throw new Error('tooltip data missing creation rating');
-      if (!tooltip?.getAttribute('data-tooltip')?.includes('TO')) throw new Error('tooltip data missing turnover rating');
+      const details = tooltip?.getAttribute('data-tooltip') ?? '';
+      if (!details.includes(${JSON.stringify(seed.player)})) throw new Error('tooltip data missing player name');
+      for (const label of ['PPG', 'APG', 'RPG', 'DEF', 'GRAV']) {
+        if (!details.includes(label)) throw new Error('tooltip data missing ' + label);
+      }
+      for (const label of ['OVR', 'CRE', 'SCO', 'EFF', 'REB', 'RIM', 'SPG', 'BPG', 'SG', 'OG', 'TO']) {
+        if (details.includes(label)) throw new Error('tooltip has extra stat ' + label);
+      }
       if (!style.content.includes(${JSON.stringify(seed.player)})) throw new Error('tooltip details missing player name');
     `);
 
