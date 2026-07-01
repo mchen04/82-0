@@ -39,6 +39,11 @@ function rerollStatus(used: boolean, enabled: boolean) {
   return enabled ? "Available" : "Off";
 }
 
+function standingLabel(standing: PublicLobbyState["standings"][number] | undefined) {
+  if (!standing) return "0W · 0L · 0T";
+  return `${standing.wins}W · ${standing.losses}L · ${standing.ties}T`;
+}
+
 function slotDetails(slot: LineupSlot) {
   return playerStatDetails(slot);
 }
@@ -170,12 +175,28 @@ export function MobileLineup({ lineup, selected, movingPosition, canPick, canMov
   );
 }
 
-export function Opponents({ state }: { state: PublicLobbyState }) {
+export function Opponents({
+  state,
+  showStandings = false,
+  onNext,
+  isHost = false,
+  busy = false,
+}: {
+  state: PublicLobbyState;
+  showStandings?: boolean;
+  onNext?: () => void;
+  isHost?: boolean;
+  busy?: boolean;
+}) {
   const match = state.activeMatch;
   if (!match) return null;
+  const standingsByPlayer = new Map(state.standings.map((standing) => [standing.playerId, standing]));
   return (
     <section className="panel panel-pad stack">
-      <p className="section-title">Lobby Progress</p>
+      <div className="players-panel-head">
+        <p className="section-title">{showStandings ? "Players" : "Lobby Progress"}</p>
+        {showStandings ? <span className="eyebrow">{state.players.length} joined</span> : null}
+      </div>
       {match.tiebreakerOf ? <div className="notice">Tiebreaker match: only tied players are drafting this round.</div> : null}
       {match.runs.map((run) => {
         const result = run.finalResult;
@@ -183,6 +204,7 @@ export function Opponents({ state }: { state: PublicLobbyState }) {
         const spin = progressSpin(state, run);
         const rerollsEnabled = state.rerollsEnabled;
         const spinLabel = spin ? `${spin.team} ${spin.era}` : result ? "Complete" : "No spin";
+        const standing = standingsByPlayer.get(run.playerId);
         return (
           <div
             className={`opponent-card ${match.mode === "snake" && match.currentTurnPlayerId === run.playerId ? "current-turn" : ""}`}
@@ -197,13 +219,16 @@ export function Opponents({ state }: { state: PublicLobbyState }) {
                   Round {run.round}/5 · ${run.budgetLeft} left · {run.status}
                 </p>
               </div>
-              {result ? (
-                <strong className="grade">
-                  {result.wins}-{result.losses}
-                </strong>
-              ) : (
-                <span className="eyebrow progress-spin-label">{spinLabel}</span>
-              )}
+              <div className="opponent-status">
+                {showStandings ? <span className="standing-chip">{standingLabel(standing)}</span> : null}
+                {result ? (
+                  <strong className="grade">
+                    {result.wins}-{result.losses}
+                  </strong>
+                ) : (
+                  <span className="eyebrow progress-spin-label">{spinLabel}</span>
+                )}
+              </div>
             </div>
             <div className="progress-details">
               <ProgressDetail label="Team reroll" value={rerollStatus(run.teamRerollUsed, rerollsEnabled)} used={run.teamRerollUsed} testId={`progress-team-reroll-${run.playerId}`} />
@@ -216,6 +241,12 @@ export function Opponents({ state }: { state: PublicLobbyState }) {
           </div>
         );
       })}
+      {showStandings && state.status === "results" && onNext ? (
+        <button className="btn primary" type="button" disabled={!isHost || busy} onClick={onNext}>
+          <RotateCcw size={17} />
+          Play Again
+        </button>
+      ) : null}
     </section>
   );
 }

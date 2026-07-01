@@ -70,6 +70,7 @@ a {
 
 .shell {
   min-height: 100vh;
+  overflow-x: clip;
   padding-bottom: 7rem;
   color: var(--ink);
 }
@@ -151,6 +152,13 @@ a {
 .stack {
   display: grid;
   gap: 1rem;
+}
+
+.draft-controls,
+.draft-board,
+.draft-lineup,
+.draft-players {
+  min-width: 0;
 }
 
 .panel {
@@ -854,6 +862,13 @@ a {
   box-shadow: 4px 4px 0 var(--orange);
 }
 
+.players-panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
 .opponent-top,
 .standing-row {
   display: flex;
@@ -862,8 +877,31 @@ a {
   gap: 0.75rem;
 }
 
+.opponent-status {
+  display: grid;
+  min-width: 0;
+  max-width: 50%;
+  justify-items: end;
+  gap: 0.3rem;
+}
+
+.standing-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.65rem;
+  border: 2px solid var(--ink);
+  background: var(--chalk);
+  padding: 0 0.4rem;
+  color: var(--ink);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.62rem;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 .progress-spin-label {
-  max-width: 48%;
+  max-width: 100%;
   overflow-wrap: anywhere;
   text-align: right;
 }
@@ -1074,8 +1112,18 @@ a {
 
   .draft-controls,
   .draft-board,
+  .draft-players,
   .game-grid-draft .side {
     min-width: 0;
+  }
+
+  .game-grid-draft .spin-actions,
+  .game-grid-draft .spin-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .draft-players {
+    grid-column: 1 / -1;
   }
 
   .game-grid-draft .candidate-list {
@@ -1103,15 +1151,55 @@ a {
     height: 104px;
   }
 
+  .game-grid-draft .court-slot {
+    width: 82px;
+    height: 82px;
+  }
+
   .court-core {
     inset: 18px;
+  }
+
+  .game-grid-draft .court-core {
+    inset: 14px;
+  }
+
+  .draft-controls {
+    position: sticky;
+    top: 6rem;
+    align-self: start;
   }
 }
 
 @media (min-width: 1280px) {
   .game-grid-draft {
-    max-width: 104rem;
-    grid-template-columns: minmax(250px, 0.78fr) minmax(430px, 1.18fr) minmax(340px, 0.92fr);
-    gap: 1.25rem;
+    max-width: 112rem;
+    grid-template-columns: minmax(13rem, 0.62fr) minmax(25rem, 1.14fr) minmax(19rem, 0.86fr) minmax(16rem, 0.78fr);
+    gap: 1rem;
+  }
+
+  .draft-players {
+    grid-column: auto;
+    position: sticky;
+    top: 6rem;
+    align-self: start;
+  }
+
+  .draft-players .panel {
+    max-height: calc(100vh - 8rem);
+    overflow-y: auto;
+  }
+
+  .game-grid-draft .court {
+    min-height: 340px;
+  }
+
+  .game-grid-draft .court-slot {
+    width: 94px;
+    height: 94px;
+  }
+
+  .game-grid-draft .court-core {
+    inset: 16px;
   }
 }
