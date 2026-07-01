@@ -23,7 +23,7 @@ import {
 } from "./lobby-repository";
 import { buildPublicMatch } from "./lobby-serializer";
 import { capAmountFor, isLegalCost, maxLegalCost, openPositions, scoreLineup, selectedPlayerIds, slotCount, toLineupSlot } from "./rules";
-import { id, lobbyCode, pickRandom, secretToken } from "./random";
+import { id, lobbyCode, pickRandom, secretToken, shuffleBySeed } from "./random";
 import { POSITIONS, type Lineup, type PlayerSeason, type Position, type PublicLobbyState, type Spin } from "./types";
 
 const CreateLobbySchema = z.object({
@@ -281,10 +281,10 @@ async function createMatch(client: PoolClient, lobby: LobbyRow, participantIds: 
   const basePlayers = participantIds
     ? participantIds
     : (await getActiveLobbyPlayers(client, lobby.id)).rows.map((player) => player.id);
-  const players = lobby.mode === "snake" ? rotateForRandomSnakeStarter(basePlayers) : basePlayers;
-  if (players.length < 2) throw new AppError(409, "not_enough_players", "At least two players are required.");
+  if (basePlayers.length < 2) throw new AppError(409, "not_enough_players", "At least two players are required.");
 
   const matchId = id();
+  const players = shuffleBySeed(basePlayers, `${matchId}:${roundNo}`);
   const currentTurn = lobby.mode === "snake" ? players[0] : null;
   await client.query(
     `INSERT INTO matches(id, lobby_id, mode, round_no, status, participant_ids, current_turn_player_id, tiebreaker_of)
@@ -306,13 +306,6 @@ async function createMatch(client: PoolClient, lobby: LobbyRow, participantIds: 
   );
   await recordEvent(client, lobby.id, matchId, null, tiebreakerOf ? "match.tiebreaker_started" : "match.started", { participantIds: players });
   if (lobby.mode === "snake") await advanceSnakeTurn(client, { ...lobby, active_match_id: matchId }, matchId);
-}
-
-function rotateForRandomSnakeStarter(players: string[]) {
-  if (players.length < 2) return players;
-  const starter = pickRandom(players);
-  const starterIndex = players.indexOf(starter);
-  return [...players.slice(starterIndex), ...players.slice(0, starterIndex)];
 }
 
 async function applyParallelAction(client: PoolClient, lobby: LobbyRow, match: MatchRow, actor: LobbyPlayerRow, parsed: z.infer<typeof ActionSchema>) {

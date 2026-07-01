@@ -8,6 +8,7 @@ function optionalStat(label: string, value: number | undefined) {
 }
 
 export function playerStatDetails(player: DetailPlayer) {
+  const positionLabel = "position" in player ? player.position : player.positions.join(" / ");
   const stats = [
     optionalStat("PPG", player.perGame.ppg),
     optionalStat("APG", player.perGame.apg),
@@ -16,5 +17,5 @@ export function playerStatDetails(player: DetailPlayer) {
     optionalStat("GRAV", player.ratings.shootingGravity),
   ].filter(Boolean);
 
-  return [player.player, stats.join(" / ")].join("\n");
+  return [`${player.player} · ${positionLabel} · ${player.team} · ${player.era}`, stats.join(" / ")].join("\n");
 }

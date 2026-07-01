@@ -15,7 +15,10 @@ export async function buildPublicMatch(client: DbClient, lobby: LobbyRow, matchI
   const match = await getMatchById(client, matchId);
   if (!match) return null;
   const runs = await getRunsForMatch(client, match.id);
-  const publicRuns = runs.map(publicRunForLobby(lobby));
+  const runOrder = new Map(match.participant_ids.map((playerId, index) => [playerId, index]));
+  const publicRuns = [...runs]
+    .sort((a, b) => (runOrder.get(a.player_id) ?? Number.MAX_SAFE_INTEGER) - (runOrder.get(b.player_id) ?? Number.MAX_SAFE_INTEGER))
+    .map(publicRunForLobby(lobby));
   const currentRun = match.mode === "snake"
     ? runs.find((run) => run.player_id === match.current_turn_player_id) ?? null
     : runs.find((run) => run.player_id === viewerPlayerId) ?? null;
