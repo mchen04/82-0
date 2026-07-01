@@ -657,6 +657,10 @@ a {
   cursor: default;
 }
 
+.court-slot.filled.available {
+  cursor: pointer;
+}
+
 .court-slot.move-source {
   cursor: grab;
 }
@@ -778,6 +782,10 @@ a {
   border-color: var(--ink);
   background: var(--ink);
   cursor: default;
+}
+
+.mobile-slot.filled.available {
+  cursor: pointer;
 }
 
 .mobile-slot.move-source {
@@ -927,6 +935,10 @@ a {
   margin: 0.5rem auto 0;
   color: #525252;
   font-weight: 700;
+}
+
+.empty-state.compact {
+  min-height: 220px;
 }
 
 @media (min-width: 640px) {

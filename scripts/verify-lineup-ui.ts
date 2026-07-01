@@ -7,7 +7,8 @@ import { promisify } from "node:util";
 import { createLobby, joinLobby, getLobbyState, applyLobbyAction } from "../lib/multiplayer";
 import { getPool, query } from "../lib/db";
 import { loadGamePack } from "../lib/game-data";
-import { salary } from "../lib/rules";
+import { salary, toLineupSlot } from "../lib/rules";
+import { type Lineup } from "../lib/types";
 
 loadEnvConfig(process.cwd());
 
@@ -61,6 +62,47 @@ async function main() {
     `);
     await waitForPage(filledScript(seed.fromPosition, seed.player));
 
+    await query(`UPDATE runs SET lineup = $2::jsonb, cap_spent = $3, current_spin = null, updated_at = now() WHERE id = $1`, [
+      seed.runId,
+      JSON.stringify(seed.swap.lineup),
+      seed.swap.capSpent,
+    ]);
+    await waitForPage(filledScript(seed.swap.fromPosition, seed.swap.source.player));
+    await assertFilled(seed.swap.position, seed.swap.target.player);
+    await evalPage(`
+      window.__lineupSwapDataTransfer = new DataTransfer();
+      document.querySelector('[data-testid="court-slot-${seed.swap.fromPosition}"]').dispatchEvent(
+        new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: window.__lineupSwapDataTransfer }),
+      );
+    `);
+    await browser("wait", "300");
+    await evalPage(`
+      const target = document.querySelector('[data-testid="court-slot-${seed.swap.position}"]');
+      if (!target.classList.contains('available')) throw new Error('occupied swap target was not marked available');
+      target.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: window.__lineupSwapDataTransfer }));
+      target.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: window.__lineupSwapDataTransfer }));
+    `);
+    await waitForPage(filledScript(seed.swap.position, seed.swap.source.player));
+    await assertFilled(seed.swap.fromPosition, seed.swap.target.player);
+
+    await query(`UPDATE runs SET current_spin = $2::jsonb, updated_at = now() WHERE id = $1`, [seed.runId, JSON.stringify(seed.searchSpin)]);
+    await waitForPage(`
+      if (!document.querySelector('[aria-label="Search players"]')) throw new Error('search input missing before query');
+    `);
+    await evalPage(`
+      const input = document.querySelector('[aria-label="Search players"]');
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+      if (!input || !setter) throw new Error('search input setter missing');
+      setter.call(input, 'zzzz-no-player');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    `);
+    await waitForPage(`
+      const input = document.querySelector('[aria-label="Search players"]');
+      if (!input) throw new Error('search input disappeared after no-result query');
+      if (input.value !== 'zzzz-no-player') throw new Error('search query did not stick');
+      if (!document.body.textContent.includes('No matches.')) throw new Error('no-result search state missing');
+    `);
+
     console.log("Lineup UI verification passed.");
   } finally {
     await browser("close").catch(() => undefined);
@@ -88,12 +130,44 @@ async function seedLobby() {
   state = await getLobbyState(host.code, host.token);
   await applyLobbyAction(host.code, { token: host.token, expectedVersion: state.stateVersion, action: "pick", playerSeasonId: pick.id, position: fromPosition });
 
+  const swap = swappablePair(new Set([pick.id]));
+  const searchPlayer = loadGamePack().players.find((player) => player.id !== pick.id && player.positions.some((slot) => slot !== fromPosition));
+  assert.ok(searchPlayer, "searchable player exists");
+
   return {
     code: host.code,
     token: host.token,
+    runId: run.id,
     player: pick.player,
     fromPosition,
     toPosition,
+    swap,
+    searchSpin: { team: searchPlayer.team, era: searchPlayer.era },
+  };
+}
+
+function swappablePair(excludedIds: Set<string>) {
+  const pack = loadGamePack();
+  const options = pack.players.flatMap((source) =>
+    pack.players.flatMap((target) => {
+      if (source.id === target.id || excludedIds.has(source.id) || excludedIds.has(target.id)) return [];
+      return source.positions.flatMap((fromPosition) =>
+        target.positions
+          .filter((position) => position !== fromPosition && source.positions.includes(position) && target.positions.includes(fromPosition))
+          .map((position) => ({ source, target, fromPosition, position, cost: salary(source) + salary(target) })),
+      );
+    }),
+  );
+  const pair = options.sort((a, b) => a.cost - b.cost || a.source.player.localeCompare(b.source.player) || a.target.player.localeCompare(b.target.player))[0];
+  assert.ok(pair, "swappable player pair exists");
+  const lineup: Lineup = {
+    [pair.fromPosition]: toLineupSlot(pair.fromPosition, pair.source),
+    [pair.position]: toLineupSlot(pair.position, pair.target),
+  };
+  return {
+    ...pair,
+    lineup,
+    capSpent: salary(pair.source) + salary(pair.target),
   };
 }
 

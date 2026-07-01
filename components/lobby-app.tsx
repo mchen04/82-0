@@ -95,7 +95,8 @@ export function LobbyApp({ code }: { code: string }) {
   const visibleRun = viewerRun ?? currentRun;
   const activeSpin = activeMatch?.mode === "snake" ? activeMatch.currentSpin : viewerRun?.currentSpin ?? null;
   const showDraftLayout = Boolean(token && activeMatch && state?.status !== "lobby");
-  const canEditLineup = canAct && !busy && viewerRun?.status === "active";
+  const canPickLineup = canAct && !busy && viewerRun?.status === "active";
+  const canMoveLineup = !busy && viewerRun?.status === "active";
   const capStatusPanel = <CapStatus state={state} run={visibleRun} />;
   const spinPanel = (
     <SpinPanel
@@ -231,7 +232,8 @@ export function LobbyApp({ code }: { code: string }) {
                 lineup={viewerRun?.lineup ?? {}}
                 selected={selected}
                 movingPosition={movingPosition}
-                canAct={canEditLineup}
+                canPick={canPickLineup}
+                canMove={canMoveLineup}
                 onPick={(position) => selected && action("pick", { playerSeasonId: selected.id, position })}
                 onStartMove={(position) => {
                   setSelected(null);
@@ -252,7 +254,8 @@ export function LobbyApp({ code }: { code: string }) {
           lineup={viewerRun?.lineup ?? {}}
           selected={selected}
           movingPosition={movingPosition}
-          canAct={canEditLineup}
+          canPick={canPickLineup}
+          canMove={canMoveLineup}
           onPick={(position) => selected && action("pick", { playerSeasonId: selected.id, position })}
           onStartMove={(position) => {
             setSelected(null);
@@ -432,6 +435,7 @@ function BoardPanel({
   const [sort, setSort] = useState<SortKey>("PPG");
   const match = state?.activeMatch;
   const ownFinal = viewerRun?.finalResult;
+  const poolCount = match?.candidates.length ?? 0;
   const candidates = useMemo(() => {
     const needle = query.trim().toLowerCase();
     const filtered = (match?.candidates ?? []).filter((candidate) => {
@@ -456,7 +460,7 @@ function BoardPanel({
   if (!match) return null;
 
   const title = match.mode === "snake" && match.currentSpin ? `${match.currentSpin.team} ${match.currentSpin.era}` : viewerRun?.currentSpin ? `${viewerRun.currentSpin.team} ${viewerRun.currentSpin.era}` : "Spin, Pick, Place";
-  const subtitle = selected ? `Placing ${selected.player}` : candidates.length ? `${candidates.length} players in pool` : "Each spin reveals one team and one decade";
+  const subtitle = selected ? `Placing ${selected.player}` : poolCount ? `${candidates.length} of ${poolCount} players in pool` : "Each spin reveals one team and one decade";
 
   return (
     <section className="panel">
@@ -464,7 +468,7 @@ function BoardPanel({
         <p className="black-head-title">{title}</p>
         <p className="black-head-subtitle">{subtitle}</p>
       </div>
-      {candidates.length ? (
+      {poolCount ? (
         <>
           <div className="filters panel-pad">
             <div className="position-filter-row" aria-label="Position filters">
@@ -486,17 +490,26 @@ function BoardPanel({
               </select>
             </label>
           </div>
-          <div className="candidate-list">
-            {candidates.map((candidate) => (
-              <CandidateCard
-                key={candidate.id}
-                candidate={candidate}
-                active={selected?.id === candidate.id}
-                disabled={busy || !canAct || !candidate.assignable}
-                onSelect={() => setSelected(selected?.id === candidate.id ? null : candidate)}
-              />
-            ))}
-          </div>
+          {candidates.length ? (
+            <div className="candidate-list">
+              {candidates.map((candidate) => (
+                <CandidateCard
+                  key={candidate.id}
+                  candidate={candidate}
+                  active={selected?.id === candidate.id}
+                  disabled={busy || !canAct || !candidate.assignable}
+                  onSelect={() => setSelected(selected?.id === candidate.id ? null : candidate)}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="empty-state compact">
+              <div>
+                <h2>No matches.</h2>
+                <p>Try another player name or position.</p>
+              </div>
+            </div>
+          )}
           {selected ? (
             <div className="notice">
               Choose {selected.openPositions.join(" / ")} on the court or mobile lineup strip to draft {selected.player}.
@@ -599,27 +612,33 @@ type LineupPickerProps = {
   lineup: Partial<Record<Position, LineupSlot>>;
   selected: Candidate | null;
   movingPosition: Position | null;
-  canAct: boolean;
+  canPick: boolean;
+  canMove: boolean;
   onPick: (position: Position) => void;
   onStartMove: (position: Position) => void;
   onMove: (fromPosition: Position, position: Position) => void;
 };
 
-function canMoveFrom(lineup: Partial<Record<Position, LineupSlot>>, position: Position) {
-  const slot = lineup[position];
-  return Boolean(slot?.positions.some((target) => target !== position && !lineup[target]));
+function canMoveTo(lineup: Partial<Record<Position, LineupSlot>>, fromPosition: Position, position: Position) {
+  if (fromPosition === position) return false;
+  const slot = lineup[fromPosition];
+  if (!slot?.positions.includes(position)) return false;
+  const targetSlot = lineup[position];
+  return !targetSlot || targetSlot.positions.includes(fromPosition);
 }
 
-function Court({ lineup, selected, movingPosition, canAct, onPick, onStartMove, onMove }: LineupPickerProps) {
-  const movingSlot = movingPosition ? lineup[movingPosition] : undefined;
+function canMoveFrom(lineup: Partial<Record<Position, LineupSlot>>, position: Position) {
+  return POSITIONS.some((target) => canMoveTo(lineup, position, target));
+}
 
+function Court({ lineup, selected, movingPosition, canPick, canMove, onPick, onStartMove, onMove }: LineupPickerProps) {
   return (
     <section className="court">
       {POSITIONS.map((position) => {
         const slot = lineup[position];
-        const pickTarget = Boolean(canAct && selected?.openPositions.includes(position) && !slot);
-        const moveTarget = Boolean(canAct && movingPosition && movingSlot?.positions.includes(position) && !slot);
-        const moveSource = Boolean(canAct && slot && canMoveFrom(lineup, position));
+        const pickTarget = Boolean(canPick && selected?.openPositions.includes(position) && !slot);
+        const moveTarget = Boolean(canMove && movingPosition && canMoveTo(lineup, movingPosition, position));
+        const moveSource = Boolean(canMove && slot && canMoveFrom(lineup, position));
         const available = pickTarget || moveTarget;
         const details = slot ? slotDetails(slot) : undefined;
         return (
@@ -688,17 +707,15 @@ function PlayerInitials({ slot, className, children }: { slot: LineupSlot; class
   );
 }
 
-function MobileLineup({ lineup, selected, movingPosition, canAct, onPick, onStartMove, onMove }: LineupPickerProps) {
-  const movingSlot = movingPosition ? lineup[movingPosition] : undefined;
-
+function MobileLineup({ lineup, selected, movingPosition, canPick, canMove, onPick, onStartMove, onMove }: LineupPickerProps) {
   return (
     <section className="mobile-lineup" data-testid="mobile-lineup-strip">
       <div className="mobile-slots">
         {POSITIONS.map((position) => {
           const slot = lineup[position];
-          const pickTarget = Boolean(canAct && selected?.openPositions.includes(position) && !slot);
-          const moveTarget = Boolean(canAct && movingPosition && movingSlot?.positions.includes(position) && !slot);
-          const moveSource = Boolean(canAct && slot && canMoveFrom(lineup, position));
+          const pickTarget = Boolean(canPick && selected?.openPositions.includes(position) && !slot);
+          const moveTarget = Boolean(canMove && movingPosition && canMoveTo(lineup, movingPosition, position));
+          const moveSource = Boolean(canMove && slot && canMoveFrom(lineup, position));
           const available = pickTarget || moveTarget;
           const details = slot ? slotDetails(slot) : undefined;
           return (

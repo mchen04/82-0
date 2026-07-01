@@ -14,6 +14,8 @@ async function main() {
   await verifyCapAmounts();
   await verifyStaleAction();
   await verifyLineupMove();
+  await verifyLineupSwap();
+  await verifySnakeOffTurnLineupMove();
   await verifyParallelTie();
   await verifySnakeDraft();
   await getPool().end();
@@ -87,6 +89,54 @@ async function verifyLineupMove() {
   assert.equal(run.lineup[toPosition]?.playerId, pick.player.id);
   assert.equal(run.lineup[toPosition]?.position, toPosition);
   assert.equal(run.picks.find((slot) => slot.playerId === pick.player.id)?.position, toPosition);
+}
+
+async function verifyLineupSwap() {
+  const host = await createLobby({ name: "Swap A", mode: "parallel", capType: "hard", rerollsEnabled: true });
+  await joinLobby(host.code, { name: "Swap B" });
+  let state = await getLobbyState(host.code, host.token);
+  state = await applyLobbyAction(host.code, { token: host.token, expectedVersion: state.stateVersion, action: "start" });
+
+  const swap = swappablePair();
+  state = await forceSpinAndPick(host.code, host.token, swap.source.id, swap.fromPosition, swap.source.team, swap.source.era);
+  state = await forceSpinAndPick(host.code, host.token, swap.target.id, swap.position, swap.target.team, swap.target.era);
+  state = await applyLobbyAction(host.code, { token: host.token, expectedVersion: state.stateVersion, action: "move-pick", fromPosition: swap.fromPosition, position: swap.position });
+
+  const run = state.activeMatch?.runs.find((candidate) => candidate.playerId === state.viewerPlayerId);
+  assert.ok(run, "viewer run exists after swap");
+  assert.equal(run.lineup[swap.position]?.playerId, swap.source.id);
+  assert.equal(run.lineup[swap.position]?.position, swap.position);
+  assert.equal(run.lineup[swap.fromPosition]?.playerId, swap.target.id);
+  assert.equal(run.lineup[swap.fromPosition]?.position, swap.fromPosition);
+  assert.equal(run.picks.find((slot) => slot.playerId === swap.source.id)?.position, swap.position);
+  assert.equal(run.picks.find((slot) => slot.playerId === swap.target.id)?.position, swap.fromPosition);
+}
+
+async function verifySnakeOffTurnLineupMove() {
+  const host = await createLobby({ name: "Snake Move A", mode: "snake", capType: "hard", rerollsEnabled: true });
+  await joinLobby(host.code, { name: "Snake Move B" });
+  let state = await getLobbyState(host.code, host.token);
+  state = await applyLobbyAction(host.code, { token: host.token, expectedVersion: state.stateVersion, action: "start" });
+
+  const pick = cheapestMovablePick();
+  const [fromPosition, toPosition] = pick.player.positions;
+  assert.ok(fromPosition && toPosition, "movable player has two positions");
+  assert.ok(state.activeMatch, "snake match exists");
+  await query(`UPDATE matches SET current_spin = $2::jsonb WHERE id = $1`, [state.activeMatch.id, JSON.stringify({ team: pick.player.team, era: pick.player.era })]);
+
+  state = await getLobbyState(host.code, host.token);
+  assert.equal(state.activeMatch?.currentTurnPlayerId, host.playerId);
+  assert.ok(state.activeMatch?.candidates.some((candidate) => candidate.id === pick.player.id && candidate.assignable));
+  state = await applyLobbyAction(host.code, { token: host.token, expectedVersion: state.stateVersion, action: "pick", playerSeasonId: pick.player.id, position: fromPosition });
+
+  state = await getLobbyState(host.code, host.token);
+  assert.notEqual(state.activeMatch?.currentTurnPlayerId, host.playerId);
+  state = await applyLobbyAction(host.code, { token: host.token, expectedVersion: state.stateVersion, action: "move-pick", fromPosition, position: toPosition });
+
+  const run = state.activeMatch?.runs.find((candidate) => candidate.playerId === host.playerId);
+  assert.ok(run, "host run exists after off-turn move");
+  assert.equal(run.lineup[fromPosition], undefined);
+  assert.equal(run.lineup[toPosition]?.playerId, pick.player.id);
 }
 
 async function forceSpinAndPick(code: string, token: string, playerSeasonId: string, position: Position, team: string, era: string) {
@@ -194,6 +244,23 @@ function cheapestMovablePick() {
     .sort((a, b) => a.cost - b.cost || a.player.player.localeCompare(b.player.player))[0];
   assert.ok(player, "multi-position player exists");
   return player;
+}
+
+function swappablePair() {
+  const players = loadGamePack().players;
+  const options = players.flatMap((source) =>
+    players.flatMap((target) => {
+      if (source.id === target.id) return [];
+      return source.positions.flatMap((fromPosition) =>
+        target.positions
+          .filter((position) => position !== fromPosition && source.positions.includes(position) && target.positions.includes(fromPosition))
+          .map((position) => ({ source, target, fromPosition, position, cost: salary(source) + salary(target) })),
+      );
+    }),
+  );
+  const swap = options.sort((a, b) => a.cost - b.cost || a.source.player.localeCompare(b.source.player) || a.target.player.localeCompare(b.target.player))[0];
+  assert.ok(swap, "swappable player pair exists");
+  return swap;
 }
 
 function cheapestLineup() {
