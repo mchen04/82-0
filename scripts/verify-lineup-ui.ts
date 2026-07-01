@@ -27,6 +27,12 @@ async function main() {
     await browser("set", "viewport", "1280", "900");
     await evalPage(`localStorage.setItem(${JSON.stringify(`better82:${seed.code}:token`)}, ${JSON.stringify(seed.token)}); location.reload();`);
     await waitForPage(filledScript(seed.fromPosition, seed.player));
+    await waitForPage(progressDetailScript(seed.hostPlayerId, "spin", "No spin"));
+    await waitForPage(progressDetailScript(seed.hostPlayerId, "team-reroll", "Used"));
+    await waitForPage(progressDetailScript(seed.hostPlayerId, "decade-reroll", "Available"));
+    await waitForPage(progressDetailScript(seed.guestPlayerId, "spin", `${seed.guestSpin.team} ${seed.guestSpin.era}`));
+    await waitForPage(progressDetailScript(seed.guestPlayerId, "team-reroll", "Available"));
+    await waitForPage(progressDetailScript(seed.guestPlayerId, "decade-reroll", "Used"));
 
     await assertFilled(seed.fromPosition, seed.player);
     await assertDisabled(seed.toPosition);
@@ -148,10 +154,13 @@ async function main() {
       const highlighted = [...document.querySelectorAll('.opponent-card.current-turn')];
       if (highlighted.length !== 1) throw new Error('current turn should highlight exactly one lobby progress card');
       if (!highlighted[0].textContent.includes(${JSON.stringify(snake.currentPlayerName)})) throw new Error('current turn highlight is on the wrong player');
+      if (!highlighted[0].textContent.includes(${JSON.stringify(`${snake.currentSpin.team} ${snake.currentSpin.era}`)})) throw new Error('current turn spin is missing from lobby progress');
       if (document.body.textContent.includes('Event History')) throw new Error('event history panel should not render in snake draft');
     `);
     const advancedSnake = await pickForCurrentSnakeDrafter(snake.code, snake.tokens, await getLobbyState(snake.code, snake.token));
     const nextCurrentName = playerNameForState(advancedSnake, advancedSnake.activeMatch?.currentTurnPlayerId ?? null);
+    const nextSpin = advancedSnake.activeMatch?.currentSpin;
+    assert.ok(nextSpin, "next snake spin exists");
     await waitForPage(`
       const cards = [...document.querySelectorAll('.opponent-card')];
       const names = cards.map((card) => card.querySelector('.player-name')?.textContent?.trim());
@@ -160,6 +169,21 @@ async function main() {
       const highlighted = [...document.querySelectorAll('.opponent-card.current-turn')];
       if (highlighted.length !== 1) throw new Error('current turn should highlight exactly one lobby progress card after advance');
       if (!highlighted[0].textContent.includes(${JSON.stringify(nextCurrentName)})) throw new Error('current turn highlight did not move to the next player');
+      if (!highlighted[0].textContent.includes(${JSON.stringify(`${nextSpin.team} ${nextSpin.era}`)})) throw new Error('advanced current turn spin is missing from lobby progress');
+    `);
+
+    const noReroll = await seedNoRerollLobby();
+    await browser("open", `http://127.0.0.1:${port}/lobby/${noReroll.code}`);
+    await evalPage(`localStorage.setItem(${JSON.stringify(`better82:${noReroll.code}:token`)}, ${JSON.stringify(noReroll.token)}); location.reload();`);
+    await waitForPage(progressDetailScript(noReroll.hostPlayerId, "team-reroll", "Off"));
+    await waitForPage(progressDetailScript(noReroll.hostPlayerId, "decade-reroll", "Off"));
+    await waitForPage(`
+      const buttons = [...document.querySelectorAll('.spin-actions .btn')];
+      const team = buttons.find((button) => button.textContent.includes('Team'));
+      const decade = buttons.find((button) => button.textContent.includes('Decade'));
+      if (!team?.textContent.includes('Team off')) throw new Error('team reroll button should say off');
+      if (!decade?.textContent.includes('Decade off')) throw new Error('decade reroll button should say off');
+      if (!team.disabled || !decade.disabled) throw new Error('reroll buttons should be disabled when rerolls are off');
     `);
 
     console.log("Lineup UI verification passed.");
@@ -179,12 +203,14 @@ async function seedLobby() {
   assert.ok(fromPosition && toPosition, "multi-position player has two positions");
 
   const host = await createLobby({ name: "UI A", mode: "parallel", capType: "hard", rerollsEnabled: true });
-  await joinLobby(host.code, { name: "UI B" });
+  const guest = await joinLobby(host.code, { name: "UI B" });
   let state = await getLobbyState(host.code, host.token);
   state = await applyLobbyAction(host.code, { token: host.token, expectedVersion: state.stateVersion, action: "start" });
 
   const run = state.activeMatch?.runs.find((candidate) => candidate.playerId === state.viewerPlayerId);
   assert.ok(run, "viewer run exists");
+  const guestRun = state.activeMatch?.runs.find((candidate) => candidate.playerId === guest.playerId);
+  assert.ok(guestRun, "guest run exists");
   await query(`UPDATE runs SET current_spin = $2::jsonb, updated_at = now() WHERE id = $1`, [run.id, JSON.stringify({ team: pick.team, era: pick.era })]);
   state = await getLobbyState(host.code, host.token);
   await applyLobbyAction(host.code, { token: host.token, expectedVersion: state.stateVersion, action: "pick", playerSeasonId: pick.id, position: fromPosition });
@@ -192,10 +218,17 @@ async function seedLobby() {
   const swap = swappablePair(new Set([pick.id]));
   const searchPlayer = loadGamePack().players.find((player) => player.id !== pick.id && player.positions.some((slot) => slot !== fromPosition));
   assert.ok(searchPlayer, "searchable player exists");
+  const guestSpin = { team: searchPlayer.team, era: searchPlayer.era };
+  await query(`UPDATE runs SET team_reroll_used = true, updated_at = now() WHERE id = $1`, [run.id]);
+  await query(`UPDATE runs SET current_spin = $2::jsonb, decade_reroll_used = true, updated_at = now() WHERE id = $1`, [guestRun.id, JSON.stringify(guestSpin)]);
+  await bumpLobbyVersion(host.code);
 
   return {
     code: host.code,
     token: host.token,
+    hostPlayerId: host.playerId,
+    guestPlayerId: guest.playerId,
+    guestSpin,
     runId: run.id,
     player: pick.player,
     team: pick.team,
@@ -218,9 +251,20 @@ async function seedSnakeLobby() {
   state = await applyLobbyAction(host.code, { token: host.token, expectedVersion: state.stateVersion, action: "start" });
   const currentPlayerId = state.activeMatch?.currentTurnPlayerId;
   assert.ok(currentPlayerId, "snake current drafter exists");
+  const currentSpin = state.activeMatch?.currentSpin;
+  assert.ok(currentSpin, "snake current spin exists");
   const currentPlayerName = playerNameForState(state, currentPlayerId);
   const progressNames = (state.activeMatch?.runs ?? []).map((run) => playerNameForState(state, run.playerId));
-  return { code: host.code, token: host.token, tokens, currentPlayerName, progressNames };
+  return { code: host.code, token: host.token, tokens, currentPlayerName, currentSpin, progressNames };
+}
+
+async function seedNoRerollLobby() {
+  const host = await createLobby({ name: "Off A", mode: "parallel", capType: "hard", rerollsEnabled: false });
+  await joinLobby(host.code, { name: "Off B" });
+  let state = await getLobbyState(host.code, host.token);
+  state = await applyLobbyAction(host.code, { token: host.token, expectedVersion: state.stateVersion, action: "start" });
+  state = await applyLobbyAction(host.code, { token: host.token, expectedVersion: state.stateVersion, action: "spin" });
+  return { code: host.code, token: host.token, hostPlayerId: host.playerId };
 }
 
 async function finishViewerRun(seed: { code: string; runId: string }) {
@@ -333,6 +377,20 @@ function enabledScript(position: string) {
     const slot = document.querySelector('[data-testid="court-slot-${position}"]');
     if (!slot) throw new Error('missing ${position} slot');
     if (slot.disabled) throw new Error('${position} should be enabled');
+  `;
+}
+
+function progressDetailScript(playerId: string, field: "spin" | "team-reroll" | "decade-reroll", expected: string) {
+  return `
+    const detail = document.querySelector('[data-testid=${JSON.stringify(`progress-${field}-${playerId}`)}]');
+    if (!detail) throw new Error('missing ${field} progress detail for ${playerId}');
+    if (!detail.textContent.includes(${JSON.stringify(expected)})) throw new Error('${field} progress detail did not include ${expected}');
+    const value = detail.querySelector('strong');
+    if (${JSON.stringify(field)} === 'spin') {
+      const style = getComputedStyle(value);
+      if (style.whiteSpace === 'nowrap') throw new Error('spin progress value should be allowed to wrap');
+      if (style.overflowWrap !== 'anywhere') throw new Error('spin progress value should preserve long team and decade text');
+    }
   `;
 }
 

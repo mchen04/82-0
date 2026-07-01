@@ -27,6 +27,18 @@ function playerName(state: PublicLobbyState, id: string | null | undefined) {
   return state.players.find((player) => player.id === id)?.name ?? "Unknown";
 }
 
+function progressSpin(state: PublicLobbyState, run: PublicRun) {
+  const match = state.activeMatch;
+  if (!match) return run.currentSpin;
+  if (match.mode === "snake") return match.currentTurnPlayerId === run.playerId ? match.currentSpin : null;
+  return run.currentSpin;
+}
+
+function rerollStatus(used: boolean, enabled: boolean) {
+  if (used) return "Used";
+  return enabled ? "Available" : "Off";
+}
+
 function slotDetails(slot: LineupSlot) {
   return playerStatDetails(slot);
 }
@@ -168,8 +180,16 @@ export function Opponents({ state }: { state: PublicLobbyState }) {
       {match.runs.map((run) => {
         const result = run.finalResult;
         const progress = Math.round((run.picks.length / 5) * 100);
+        const spin = progressSpin(state, run);
+        const rerollsEnabled = state.rerollsEnabled;
+        const spinLabel = spin ? `${spin.team} ${spin.era}` : result ? "Complete" : "No spin";
         return (
-          <div className={`opponent-card ${match.mode === "snake" && match.currentTurnPlayerId === run.playerId ? "current-turn" : ""}`} key={run.id} aria-current={match.mode === "snake" && match.currentTurnPlayerId === run.playerId ? "true" : undefined}>
+          <div
+            className={`opponent-card ${match.mode === "snake" && match.currentTurnPlayerId === run.playerId ? "current-turn" : ""}`}
+            key={run.id}
+            aria-current={match.mode === "snake" && match.currentTurnPlayerId === run.playerId ? "true" : undefined}
+            data-testid={`progress-card-${run.playerId}`}
+          >
             <div className="opponent-top">
               <div>
                 <p className="player-name">{playerName(state, run.playerId)}</p>
@@ -182,8 +202,13 @@ export function Opponents({ state }: { state: PublicLobbyState }) {
                   {result.wins}-{result.losses}
                 </strong>
               ) : (
-                <span className="eyebrow">{run.currentSpin ? `${run.currentSpin.team} ${run.currentSpin.era}` : "No spin"}</span>
+                <span className="eyebrow">{spinLabel}</span>
               )}
+            </div>
+            <div className="progress-details">
+              <ProgressDetail label="Spin" value={spinLabel} testId={`progress-spin-${run.playerId}`} />
+              <ProgressDetail label="Team reroll" value={rerollStatus(run.teamRerollUsed, rerollsEnabled)} used={run.teamRerollUsed} testId={`progress-team-reroll-${run.playerId}`} />
+              <ProgressDetail label="Decade reroll" value={rerollStatus(run.decadeRerollUsed, rerollsEnabled)} used={run.decadeRerollUsed} testId={`progress-decade-reroll-${run.playerId}`} />
             </div>
             <div className="progress-bar" aria-hidden="true">
               <div className="progress-fill" style={{ width: `${progress}%` }} />
@@ -193,6 +218,15 @@ export function Opponents({ state }: { state: PublicLobbyState }) {
         );
       })}
     </section>
+  );
+}
+
+function ProgressDetail({ label, value, used = false, testId }: { label: string; value: string; used?: boolean; testId: string }) {
+  return (
+    <div className={`progress-detail ${used ? "used" : ""}`} data-testid={testId}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
   );
 }
 
