@@ -9,3 +9,4 @@ notes: created by loopctl
 | 2 | BLOCK | 0/1/0 | 1 | 562 | pass | conditional lobby polling with 204 unchanged responses, token-aware client cache, verifier state-version fixture bumps |
 | 3 | BLOCK | 0/1/0 | 1 | 565 | pass | cleanup cron fails closed in production when CRON_SECRET is missing |
 | 4 | APPROVE | 0/0/0 | 0 | 565 | pass | clean local audit: lifecycle, mutation gates, cleanup, DB seed/reset safety, polling, and cron auth reviewed |
+| 5 | APPROVE | 0/0/0 | 0 | 565 | pass | second clean local audit: API errors, client state handling, serialization shape, and residual structural risks reviewed |
