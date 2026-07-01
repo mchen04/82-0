@@ -4,7 +4,17 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, Copy, Crown, Play, RotateCcw, Shuffle, Swords, Trophy } from "lucide-react";
 import { Header } from "./home-app";
 import { formatStat, HARD_CAP_AMOUNT, initials, SOFT_CAP_AMOUNT } from "@/lib/rules";
-import { POSITIONS, type Candidate, type CapType, type LineupSlot, type LobbyMode, type Position, type PublicLobbyState, type PublicRun } from "@/lib/types";
+import {
+  POSITIONS,
+  type Candidate,
+  type CapType,
+  type LineupSlot,
+  type LobbyMode,
+  type Position,
+  type PublicLobbyState,
+  type PublicRun,
+  type SortKey,
+} from "@/lib/types";
 
 type ActionName = "settings" | "start" | "spin" | "reroll-team" | "reroll-decade" | "pick" | "next-match";
 
@@ -79,6 +89,31 @@ export function LobbyApp({ code }: { code: string }) {
   const activeMatch = state?.activeMatch ?? null;
   const visibleRun = viewerRun ?? currentRun;
   const activeSpin = activeMatch?.mode === "snake" ? activeMatch.currentSpin : viewerRun?.currentSpin ?? null;
+  const showDraftLayout = Boolean(token && activeMatch && state?.status !== "lobby");
+  const capStatusPanel = <CapStatus state={state} run={visibleRun} />;
+  const spinPanel = (
+    <SpinPanel
+      state={state}
+      run={currentRun}
+      viewerRun={viewerRun}
+      spin={activeSpin}
+      canAct={canAct}
+      busy={busy}
+      onAction={action}
+    />
+  );
+  const boardPanel = (
+    <BoardPanel
+      state={state}
+      run={currentRun}
+      viewerRun={viewerRun}
+      selected={selected}
+      setSelected={setSelected}
+      canAct={canAct}
+      busy={busy}
+      onPick={(position) => selected && action("pick", { playerSeasonId: selected.id, position })}
+    />
+  );
 
   async function join() {
     setBusy(true);
@@ -150,38 +185,32 @@ export function LobbyApp({ code }: { code: string }) {
         }
       />
 
-      <section className="game-grid">
-        <div className="stack">
-          {error ? <div className="error">{error}</div> : null}
-          {!token ? (
-            <JoinPanel code={code} name={name} setName={setName} busy={busy} onJoin={join} />
-          ) : state?.status === "lobby" ? (
-            <LobbySetup state={state} busy={busy} isHost={isHost} onAction={action} />
-          ) : (
-            <>
-              <CapStatus state={state} run={visibleRun} />
-              <SpinPanel
-                state={state}
-                run={currentRun}
-                viewerRun={viewerRun}
-                spin={activeSpin}
-                canAct={canAct}
-                busy={busy}
-                onAction={action}
-              />
-              <BoardPanel
-                state={state}
-                run={currentRun}
-                viewerRun={viewerRun}
-                selected={selected}
-                setSelected={setSelected}
-                canAct={canAct}
-                busy={busy}
-                onPick={(position) => selected && action("pick", { playerSeasonId: selected.id, position })}
-              />
-            </>
-          )}
-        </div>
+      <section className={`game-grid ${showDraftLayout ? "game-grid-draft" : ""}`}>
+        {showDraftLayout ? (
+          <>
+            <div className="stack draft-controls">
+              {error ? <div className="error">{error}</div> : null}
+              {capStatusPanel}
+              {spinPanel}
+            </div>
+            <div className="draft-board">{boardPanel}</div>
+          </>
+        ) : (
+          <div className="stack">
+            {error ? <div className="error">{error}</div> : null}
+            {!token ? (
+              <JoinPanel code={code} name={name} setName={setName} busy={busy} onJoin={join} />
+            ) : state?.status === "lobby" ? (
+              <LobbySetup state={state} busy={busy} isHost={isHost} onAction={action} />
+            ) : (
+              <>
+                {capStatusPanel}
+                {spinPanel}
+                {boardPanel}
+              </>
+            )}
+          </div>
+        )}
 
         <aside className="side">
           {state ? (
@@ -366,7 +395,7 @@ function BoardPanel({
 }) {
   const [query, setQuery] = useState("");
   const [position, setPosition] = useState<Position | "All">("All");
-  const [sort, setSort] = useState("PPG");
+  const [sort, setSort] = useState<SortKey>("PPG");
   const match = state?.activeMatch;
   const ownFinal = viewerRun?.finalResult;
   const candidates = useMemo(() => {
@@ -376,8 +405,13 @@ function BoardPanel({
       const matchesPosition = position === "All" || candidate.positions.includes(position);
       return matchesQuery && matchesPosition;
     });
-    const value = (candidate: Candidate) =>
-      sort === "APG" ? candidate.perGame.apg : sort === "RPG" ? candidate.perGame.rpg : sort === "Gravity" ? candidate.ratings.shootingGravity : candidate.perGame.ppg;
+    const value = (candidate: Candidate) => {
+      if (sort === "APG") return candidate.perGame.apg;
+      if (sort === "RPG") return candidate.perGame.rpg;
+      if (sort === "Defense") return candidate.ratings.defense;
+      if (sort === "Gravity") return candidate.ratings.shootingGravity;
+      return candidate.perGame.ppg;
+    };
     return [...filtered].sort((a, b) => value(b) - value(a) || a.player.localeCompare(b.player));
   }, [match?.candidates, position, query, sort]);
 
@@ -407,12 +441,16 @@ function BoardPanel({
               ))}
             </div>
             <input className="input" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search player" aria-label="Search players" />
-            <select className="select" value={sort} onChange={(event) => setSort(event.target.value)} aria-label="Sort players">
-              <option value="PPG">PPG</option>
-              <option value="APG">APG</option>
-              <option value="RPG">RPG</option>
-              <option value="Gravity">Gravity</option>
-            </select>
+            <label className="sort-filter">
+              <span>Sort by category</span>
+              <select className="select" value={sort} onChange={(event) => setSort(event.target.value as SortKey)} aria-label="Sort players">
+                <option value="PPG">PPG</option>
+                <option value="APG">APG</option>
+                <option value="RPG">RPG</option>
+                <option value="Defense">Defense</option>
+                <option value="Gravity">Gravity</option>
+              </select>
+            </label>
           </div>
           <div className="candidate-list">
             {candidates.map((candidate) => (

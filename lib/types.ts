@@ -6,7 +6,7 @@ export type CapType = "hard" | "soft";
 export type LobbyStatus = "lobby" | "active" | "results";
 export type MatchStatus = "active" | "complete";
 export type RunStatus = "active" | "finished" | "lost";
-export type SortKey = "PPG" | "APG" | "RPG" | "Gravity";
+export type SortKey = "PPG" | "APG" | "RPG" | "Defense" | "Gravity";
 
 export type Ratings = {
   creation: number;
