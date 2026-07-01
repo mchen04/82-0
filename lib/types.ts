@@ -3,7 +3,7 @@ export const POSITIONS = ["PG", "SG", "SF", "PF", "C"] as const;
 export type Position = (typeof POSITIONS)[number];
 export type LobbyMode = "parallel" | "snake";
 export type CapType = "hard" | "soft";
-export type LobbyStatus = "lobby" | "active" | "results";
+export type LobbyStatus = "lobby" | "active" | "results" | "closed";
 export type MatchStatus = "active" | "complete";
 export type RunStatus = "active" | "finished" | "lost";
 export type SortKey = "PPG" | "APG" | "RPG" | "Defense" | "Gravity";
@@ -173,6 +173,8 @@ export type PublicLobbyState = {
   capAmount: number;
   rerollsEnabled: boolean;
   stateVersion: number;
+  lastActivityAt: string;
+  expiresAt: string;
   hostPlayerId: string | null;
   viewerPlayerId: string | null;
   players: PublicPlayer[];

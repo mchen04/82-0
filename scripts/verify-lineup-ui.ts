@@ -218,6 +218,22 @@ async function waitForPage(script: string, timeoutMs = 15_000) {
   throw lastError instanceof Error ? lastError : new Error("Timed out waiting for page condition.");
 }
 
+async function waitForServer(port: number, timeoutMs = 15_000) {
+  const startedAt = Date.now();
+  let lastError: unknown;
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/api/health`, { cache: "no-store" });
+      if (response.ok) return;
+      lastError = new Error(`Health check returned ${response.status}`);
+    } catch (error) {
+      lastError = error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  throw lastError instanceof Error ? lastError : new Error("Timed out waiting for dev server.");
+}
+
 async function browser(...args: string[]) {
   return execFileAsync("agent-browser", ["--session", session, ...args], { maxBuffer: 1024 * 1024 });
 }
@@ -242,18 +258,36 @@ function startServer(port: number) {
 
   const ready = new Promise<void>((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error("Next dev server did not become ready in time")), 30_000);
+    let settling = false;
+    let settled = false;
+    let output = "";
+    const appendOutput = (text: string) => {
+      output = `${output}${text}`.slice(-4000);
+    };
+    const fail = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      reject(error);
+    };
     const onData = (chunk: Buffer) => {
       const text = chunk.toString();
-      if (text.includes("Ready")) {
-        clearTimeout(timeout);
-        resolve();
+      appendOutput(text);
+      if (text.includes("Ready") && !settling) {
+        settling = true;
+        waitForServer(port)
+          .then(() => {
+            settled = true;
+            clearTimeout(timeout);
+            resolve();
+          })
+          .catch((error) => fail(error));
       }
     };
     child.stdout?.on("data", onData);
     child.stderr?.on("data", onData);
     child.once("exit", (code) => {
-      clearTimeout(timeout);
-      reject(new Error(`Next dev server exited early with code ${code}`));
+      fail(new Error(`Next dev server exited early with code ${code}\n${output}`));
     });
   });
 

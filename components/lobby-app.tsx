@@ -46,22 +46,34 @@ export function LobbyApp({ code }: { code: string }) {
     if (saved) setToken(saved);
   }, [code]);
 
-  const load = useCallback(async () => {
+  const fetchLobbyState = useCallback(async () => {
     const url = token ? `/api/lobbies/${code}?token=${encodeURIComponent(token)}` : `/api/lobbies/${code}`;
     const response = await fetch(url, { cache: "no-store" });
     const data = await response.json();
     if (!response.ok) throw new Error(data.message ?? "Could not load lobby.");
-    setState(data);
+    return data as PublicLobbyState;
   }, [code, token]);
+
+  const load = useCallback(async () => {
+    setState(await fetchLobbyState());
+  }, [fetchLobbyState]);
 
   useEffect(() => {
     let stopped = false;
+    let inFlight = false;
     async function tick() {
+      if (inFlight) return;
+      inFlight = true;
       try {
-        await load();
-        if (!stopped) setError("");
+        const nextState = await fetchLobbyState();
+        if (!stopped) {
+          setState(nextState);
+          setError("");
+        }
       } catch (err) {
         if (!stopped) setError(err instanceof Error ? err.message : "Could not load lobby.");
+      } finally {
+        inFlight = false;
       }
     }
     tick();
@@ -70,7 +82,7 @@ export function LobbyApp({ code }: { code: string }) {
       stopped = true;
       window.clearInterval(interval);
     };
-  }, [load]);
+  }, [fetchLobbyState]);
 
   const viewerRun = useMemo(() => {
     const match = state?.activeMatch;
