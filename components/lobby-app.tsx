@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, Copy, Crown, Play, Shuffle, Swords, Trophy } from "lucide-react";
 import { Header } from "./home-app";
 import { formatStat, HARD_CAP_AMOUNT, SOFT_CAP_AMOUNT } from "@/lib/rules";
@@ -37,23 +37,37 @@ export function LobbyApp({ code }: { code: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  const stateVersionRef = useRef<number | null>(null);
+  const stateTokenRef = useRef<string | null>(null);
 
   useEffect(() => {
     const saved = localStorage.getItem(tokenKey(code));
     if (saved) setToken(saved);
   }, [code]);
 
-  const fetchLobbyState = useCallback(async () => {
-    const url = token ? `/api/lobbies/${code}?token=${encodeURIComponent(token)}` : `/api/lobbies/${code}`;
+  const fetchLobbyState = useCallback(async (sinceVersion?: number | null) => {
+    const params = new URLSearchParams();
+    if (token) params.set("token", token);
+    if (typeof sinceVersion === "number") params.set("since", String(sinceVersion));
+    const query = params.toString();
+    const url = query ? `/api/lobbies/${code}?${query}` : `/api/lobbies/${code}`;
     const response = await fetch(url, { cache: "no-store" });
+    if (response.status === 204) return null;
     const data = await response.json();
     if (!response.ok) throw new Error(data.message ?? "Could not load lobby.");
     return data as PublicLobbyState;
   }, [code, token]);
 
+  const rememberState = useCallback((nextState: PublicLobbyState) => {
+    stateVersionRef.current = nextState.stateVersion;
+    stateTokenRef.current = token ?? null;
+    setState(nextState);
+  }, [token]);
+
   const load = useCallback(async () => {
-    setState(await fetchLobbyState());
-  }, [fetchLobbyState]);
+    const nextState = await fetchLobbyState();
+    if (nextState) rememberState(nextState);
+  }, [fetchLobbyState, rememberState]);
 
   useEffect(() => {
     let stopped = false;
@@ -62,9 +76,10 @@ export function LobbyApp({ code }: { code: string }) {
       if (inFlight) return;
       inFlight = true;
       try {
-        const nextState = await fetchLobbyState();
+        const sinceVersion = stateTokenRef.current === (token ?? null) ? stateVersionRef.current : null;
+        const nextState = await fetchLobbyState(sinceVersion);
         if (!stopped) {
-          setState(nextState);
+          if (nextState) rememberState(nextState);
           setError("");
         }
       } catch (err) {
@@ -79,7 +94,7 @@ export function LobbyApp({ code }: { code: string }) {
       stopped = true;
       window.clearInterval(interval);
     };
-  }, [fetchLobbyState]);
+  }, [fetchLobbyState, rememberState, token]);
 
   const viewerRun = useMemo(() => {
     const match = state?.activeMatch;
@@ -166,7 +181,7 @@ export function LobbyApp({ code }: { code: string }) {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message ?? "Action failed.");
-      setState(data);
+      rememberState(data);
       setSelected(null);
       setMovingPosition(null);
     } catch (err) {

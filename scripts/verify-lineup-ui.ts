@@ -67,6 +67,7 @@ async function main() {
       JSON.stringify(seed.swap.lineup),
       seed.swap.capSpent,
     ]);
+    await bumpLobbyVersion(seed.code);
     await waitForPage(filledScript(seed.swap.fromPosition, seed.swap.source.player));
     await assertFilled(seed.swap.position, seed.swap.target.player);
     await evalPage(`
@@ -86,6 +87,7 @@ async function main() {
     await assertFilled(seed.swap.fromPosition, seed.swap.target.player);
 
     await query(`UPDATE runs SET current_spin = $2::jsonb, updated_at = now() WHERE id = $1`, [seed.runId, JSON.stringify(seed.searchSpin)]);
+    await bumpLobbyVersion(seed.code);
     await waitForPage(`
       if (!document.querySelector('[aria-label="Search players"]')) throw new Error('search input missing before query');
     `);
@@ -173,6 +175,10 @@ function swappablePair(excludedIds: Set<string>) {
 
 async function assertFilled(position: string, player: string) {
   await evalPage(filledScript(position, player));
+}
+
+async function bumpLobbyVersion(code: string) {
+  await query(`UPDATE lobbies SET state_version = state_version + 1, updated_at = now() WHERE code = $1`, [code]);
 }
 
 function filledScript(position: string, player: string) {

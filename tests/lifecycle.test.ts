@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import test, { after } from "node:test";
 import { getPool, query } from "../lib/db";
 import { isAppError } from "../lib/errors";
-import { applyLobbyAction, cleanupExpiredLobbies, createLobby, getLobbyState, joinLobby } from "../lib/multiplayer";
+import { applyLobbyAction, cleanupExpiredLobbies, createLobby, getLobbyState, getLobbyStateIfChanged, joinLobby } from "../lib/multiplayer";
 
 loadEnvConfig(process.cwd());
 
@@ -74,6 +74,22 @@ test("cleanup hard-deletes closed lobbies after retention", async () => {
 
   const remaining = await query<{ count: string }>(`SELECT count(*)::text AS count FROM lobbies WHERE code = $1`, [host.code]);
   assert.equal(Number(remaining.rows[0]?.count ?? 0), 0);
+});
+
+test("conditional lobby reads skip unchanged state", async () => {
+  const host = await createLobby({ name: "Poll A", mode: "parallel", capType: "hard", rerollsEnabled: true });
+  const initial = await getLobbyState(host.code, host.token);
+
+  const unchanged = await getLobbyStateIfChanged(host.code, host.token, initial.stateVersion);
+  assert.equal(unchanged.changed, false);
+
+  const futureVersion = await getLobbyStateIfChanged(host.code, host.token, initial.stateVersion + 10);
+  assert.equal(futureVersion.changed, true);
+
+  await joinLobby(host.code, { name: "Poll B" });
+  const changed = await getLobbyStateIfChanged(host.code, host.token, initial.stateVersion);
+  assert.equal(changed.changed, true);
+  if (changed.changed) assert.equal(changed.state.players.length, 2);
 });
 
 function isExpiredLobbyError(error: unknown) {

@@ -109,73 +109,87 @@ export async function joinLobby(code: string, input: unknown) {
   return joined;
 }
 
-export async function getLobbyState(code: string, token?: string | null): Promise<PublicLobbyState> {
-  const state = await withReadTransaction(async (client) => {
+type LobbyStateResult =
+  | { changed: true; state: PublicLobbyState }
+  | { changed: false };
+
+export async function getLobbyStateIfChanged(code: string, token?: string | null, sinceVersion?: number): Promise<LobbyStateResult> {
+  const result = await withReadTransaction(async (client) => {
     const lobby = await getLobbyByCode(client, code);
     if (lobby.status === "closed" || shouldCloseLobby(lobby)) return null;
-
-    const playersResult = await getActiveLobbyPlayers(client, lobby.id);
-    const viewer = token ? playersResult.rows.find((player) => player.token === token) ?? null : null;
-    const activeMatch = lobby.active_match_id ? await buildPublicMatch(client, lobby, lobby.active_match_id, viewer?.id ?? null) : null;
-    const standings = await client.query<{
-      player_id: string;
-      wins: number;
-      losses: number;
-      ties: number;
-      total_matches: number;
-    }>(
-      `SELECT player_id, wins, losses, ties, total_matches FROM standings WHERE lobby_id = $1 ORDER BY wins DESC, ties DESC, updated_at ASC`,
-      [lobby.id],
-    );
-    const events = await client.query<{
-      id: string;
-      player_id: string | null;
-      type: string;
-      created_at: Date;
-    }>(
-      `SELECT id, player_id, type, created_at FROM events WHERE lobby_id = $1 ORDER BY created_at DESC LIMIT 30`,
-      [lobby.id],
-    );
-
-    return {
-      code: lobby.code,
-      status: lobby.status,
-      mode: lobby.mode,
-      capType: lobby.cap_type,
-      capAmount: lobby.cap_amount,
-      rerollsEnabled: lobby.rerolls_enabled,
-      stateVersion: lobby.state_version,
-      lastActivityAt: lobby.last_activity_at.toISOString(),
-      expiresAt: lobby.expires_at.toISOString(),
-      hostPlayerId: lobby.host_player_id,
-      viewerPlayerId: viewer?.id ?? null,
-      players: playersResult.rows.map((player) => ({
-        id: player.id,
-        name: player.name,
-        joinedAt: player.joined_at.toISOString(),
-        isYou: player.id === viewer?.id,
-      })),
-      activeMatch,
-      standings: standings.rows.map((row) => ({
-        playerId: row.player_id,
-        wins: Number(row.wins),
-        losses: Number(row.losses),
-        ties: Number(row.ties),
-        totalMatches: Number(row.total_matches),
-      })),
-      events: events.rows.map((event) => ({
-        id: event.id,
-        playerId: event.player_id,
-        type: event.type,
-        createdAt: event.created_at.toISOString(),
-      })),
-    };
+    if (typeof sinceVersion === "number" && lobby.state_version === sinceVersion) return { changed: false } as const;
+    return { changed: true, state: await buildLobbyState(client, lobby, token) } as const;
   });
-  if (!state) {
+  if (!result) {
     await closeExpiredLobbyByCode(code);
     throw lobbyExpiredError();
   }
-  return state;
+  return result;
+}
+
+export async function getLobbyState(code: string, token?: string | null): Promise<PublicLobbyState> {
+  const result = await getLobbyStateIfChanged(code, token);
+  if (result.changed) return result.state;
+  throw new AppError(500, "state_not_loaded", "Lobby state was not loaded.");
+}
+
+async function buildLobbyState(client: DbClient, lobby: LobbyRow, token?: string | null): Promise<PublicLobbyState> {
+  const playersResult = await getActiveLobbyPlayers(client, lobby.id);
+  const viewer = token ? playersResult.rows.find((player) => player.token === token) ?? null : null;
+  const activeMatch = lobby.active_match_id ? await buildPublicMatch(client, lobby, lobby.active_match_id, viewer?.id ?? null) : null;
+  const standings = await client.query<{
+    player_id: string;
+    wins: number;
+    losses: number;
+    ties: number;
+    total_matches: number;
+  }>(
+    `SELECT player_id, wins, losses, ties, total_matches FROM standings WHERE lobby_id = $1 ORDER BY wins DESC, ties DESC, updated_at ASC`,
+    [lobby.id],
+  );
+  const events = await client.query<{
+    id: string;
+    player_id: string | null;
+    type: string;
+    created_at: Date;
+  }>(
+    `SELECT id, player_id, type, created_at FROM events WHERE lobby_id = $1 ORDER BY created_at DESC LIMIT 30`,
+    [lobby.id],
+  );
+
+  return {
+    code: lobby.code,
+    status: lobby.status,
+    mode: lobby.mode,
+    capType: lobby.cap_type,
+    capAmount: lobby.cap_amount,
+    rerollsEnabled: lobby.rerolls_enabled,
+    stateVersion: lobby.state_version,
+    lastActivityAt: lobby.last_activity_at.toISOString(),
+    expiresAt: lobby.expires_at.toISOString(),
+    hostPlayerId: lobby.host_player_id,
+    viewerPlayerId: viewer?.id ?? null,
+    players: playersResult.rows.map((player) => ({
+      id: player.id,
+      name: player.name,
+      joinedAt: player.joined_at.toISOString(),
+      isYou: player.id === viewer?.id,
+    })),
+    activeMatch,
+    standings: standings.rows.map((row) => ({
+      playerId: row.player_id,
+      wins: Number(row.wins),
+      losses: Number(row.losses),
+      ties: Number(row.ties),
+      totalMatches: Number(row.total_matches),
+    })),
+    events: events.rows.map((event) => ({
+      id: event.id,
+      playerId: event.player_id,
+      type: event.type,
+      createdAt: event.created_at.toISOString(),
+    })),
+  };
 }
 
 export async function applyLobbyAction(code: string, input: unknown) {
