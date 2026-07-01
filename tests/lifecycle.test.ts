@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import test, { after } from "node:test";
 import { getPool, query } from "../lib/db";
 import { isAppError } from "../lib/errors";
-import { loadGamePack } from "../lib/game-data";
 import { applyLobbyAction, cleanupExpiredLobbies, createLobby, getLobbyState, getLobbyStateIfChanged, joinLobby } from "../lib/multiplayer";
 
 loadEnvConfig(process.cwd());
@@ -91,32 +90,6 @@ test("conditional lobby reads skip unchanged state", async () => {
   const changed = await getLobbyStateIfChanged(host.code, host.token, initial.stateVersion);
   assert.equal(changed.changed, true);
   if (changed.changed) assert.equal(changed.state.players.length, 2);
-});
-
-test("parallel rerolls respect lobby setting", async () => {
-  const host = await createLobby({ name: "No Reroll A", mode: "parallel", capType: "hard", rerollsEnabled: false });
-  await joinLobby(host.code, { name: "No Reroll B" });
-  let state = await getLobbyState(host.code, host.token);
-  state = await applyLobbyAction(host.code, { token: host.token, expectedVersion: state.stateVersion, action: "start" });
-
-  const run = state.activeMatch?.runs.find((candidate) => candidate.playerId === state.viewerPlayerId);
-  assert.ok(run, "viewer run exists");
-  const spin = loadGamePack().teamEras[0];
-  assert.ok(spin, "team era exists");
-  await query(`UPDATE runs SET current_spin = $2::jsonb, updated_at = now() WHERE id = $1`, [
-    run.id,
-    JSON.stringify({ team: spin.team, era: spin.era }),
-  ]);
-
-  await assert.rejects(
-    () => applyLobbyAction(host.code, { token: host.token, expectedVersion: state.stateVersion, action: "reroll-team" }),
-    (error) => {
-      assert.ok(isAppError(error), "expected AppError");
-      assert.equal(error.status, 409);
-      assert.equal(error.code, "rerolls_disabled");
-      return true;
-    },
-  );
 });
 
 function isExpiredLobbyError(error: unknown) {

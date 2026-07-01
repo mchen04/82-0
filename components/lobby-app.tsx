@@ -227,6 +227,7 @@ export function LobbyApp({ code }: { code: string }) {
               {error ? <div className="error">{error}</div> : null}
               {capStatusPanel}
               {spinPanel}
+              {state ? <Opponents state={state} /> : null}
             </div>
             <div className="draft-board">{boardPanel}</div>
           </>
@@ -247,7 +248,7 @@ export function LobbyApp({ code }: { code: string }) {
           </div>
         )}
 
-        <aside className={`side ${showDraftLayout ? "draft-lineup" : ""}`}>
+        <aside className="side">
           {state ? (
             <>
               <Court
@@ -264,16 +265,10 @@ export function LobbyApp({ code }: { code: string }) {
                 onMove={(fromPosition, position) => action("move-pick", { fromPosition, position })}
               />
               {!showDraftLayout ? <Opponents state={state} /> : null}
-              {!showDraftLayout ? <Standings state={state} onNext={() => action("next-match")} isHost={isHost} busy={busy} /> : null}
+              <Standings state={state} onNext={() => action("next-match")} isHost={isHost} busy={busy} />
             </>
           ) : null}
         </aside>
-
-        {showDraftLayout && state ? (
-          <aside className="draft-players">
-            <Opponents state={state} showStandings onNext={() => action("next-match")} isHost={isHost} busy={busy} />
-          </aside>
-        ) : null}
       </section>
 
       {state?.activeMatch ? (
@@ -402,7 +397,7 @@ function SpinPanel({
   const localRun = match?.mode === "parallel" ? viewerRun : run;
   const isSnake = match?.mode === "snake";
   const spinDisabled = busy || !canAct || Boolean(spin) || Boolean(isSnake);
-  const rerollsAllowed = Boolean(state?.rerollsEnabled);
+  const rerollsAllowed = !isSnake || state?.rerollsEnabled;
 
   return (
     <section className="panel chalk panel-pad">
@@ -423,11 +418,11 @@ function SpinPanel({
       <div className="spin-actions">
         <button className="btn" type="button" disabled={busy || !canAct || !spin || !rerollsAllowed || Boolean(localRun?.teamRerollUsed)} onClick={() => onAction("reroll-team")}>
           <Shuffle size={15} />
-          Team {localRun?.teamRerollUsed ? "used" : rerollsAllowed ? "1" : "off"}
+          Team {localRun?.teamRerollUsed ? "used" : "1"}
         </button>
         <button className="btn" type="button" disabled={busy || !canAct || !spin || !rerollsAllowed || Boolean(localRun?.decadeRerollUsed)} onClick={() => onAction("reroll-decade")}>
           <Shuffle size={15} />
-          Decade {localRun?.decadeRerollUsed ? "used" : rerollsAllowed ? "1" : "off"}
+          Decade {localRun?.decadeRerollUsed ? "used" : "1"}
         </button>
         <button className="btn primary" type="button" disabled={spinDisabled} onClick={() => onAction("spin")}>
           <Shuffle size={15} />

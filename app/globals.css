@@ -70,7 +70,6 @@ a {
 
 .shell {
   min-height: 100vh;
-  overflow-x: clip;
   padding-bottom: 7rem;
   color: var(--ink);
 }
@@ -152,13 +151,6 @@ a {
 .stack {
   display: grid;
   gap: 1rem;
-}
-
-.draft-controls,
-.draft-board,
-.draft-lineup,
-.draft-players {
-  min-width: 0;
 }
 
 .panel {
@@ -862,48 +854,12 @@ a {
   box-shadow: 4px 4px 0 var(--orange);
 }
 
-.players-panel-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.75rem;
-}
-
 .opponent-top,
 .standing-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-}
-
-.opponent-status {
-  display: grid;
-  min-width: 0;
-  max-width: 50%;
-  justify-items: end;
-  gap: 0.3rem;
-}
-
-.standing-chip {
-  display: inline-flex;
-  align-items: center;
-  min-height: 1.65rem;
-  border: 2px solid var(--ink);
-  background: var(--chalk);
-  padding: 0 0.4rem;
-  color: var(--ink);
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 0.62rem;
-  font-weight: 900;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.progress-spin-label {
-  max-width: 100%;
-  overflow-wrap: anywhere;
-  text-align: right;
 }
 
 .progress-bar {
@@ -916,51 +872,6 @@ a {
 .progress-fill {
   height: 100%;
   background: var(--orange);
-}
-
-.progress-details {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.4rem;
-  margin-top: 0.65rem;
-}
-
-.progress-detail {
-  min-width: 0;
-  border: 2px solid #e5e5e5;
-  background: #fafafa;
-  padding: 0.4rem;
-}
-
-.progress-detail span {
-  display: block;
-  color: var(--muted);
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 0.58rem;
-  font-weight: 900;
-  text-transform: uppercase;
-}
-
-.progress-detail strong {
-  display: block;
-  min-width: 0;
-  margin-top: 0.18rem;
-  color: var(--ink);
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 0.66rem;
-  font-weight: 900;
-  line-height: 1.15;
-  overflow-wrap: anywhere;
-  text-transform: uppercase;
-}
-
-.progress-detail.used {
-  border-color: #fed7aa;
-  background: #fff7ed;
-}
-
-.progress-detail.used strong {
-  color: var(--orange-dark);
 }
 
 .lineup-mini {
@@ -1112,18 +1023,8 @@ a {
 
   .draft-controls,
   .draft-board,
-  .draft-players,
   .game-grid-draft .side {
     min-width: 0;
-  }
-
-  .game-grid-draft .spin-actions,
-  .game-grid-draft .spin-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .draft-players {
-    grid-column: 1 / -1;
   }
 
   .game-grid-draft .candidate-list {
@@ -1151,55 +1052,15 @@ a {
     height: 104px;
   }
 
-  .game-grid-draft .court-slot {
-    width: 82px;
-    height: 82px;
-  }
-
   .court-core {
     inset: 18px;
-  }
-
-  .game-grid-draft .court-core {
-    inset: 14px;
-  }
-
-  .draft-controls {
-    position: sticky;
-    top: 6rem;
-    align-self: start;
   }
 }
 
 @media (min-width: 1280px) {
   .game-grid-draft {
-    max-width: 112rem;
-    grid-template-columns: minmax(13rem, 0.62fr) minmax(25rem, 1.14fr) minmax(19rem, 0.86fr) minmax(16rem, 0.78fr);
-    gap: 1rem;
-  }
-
-  .draft-players {
-    grid-column: auto;
-    position: sticky;
-    top: 6rem;
-    align-self: start;
-  }
-
-  .draft-players .panel {
-    max-height: calc(100vh - 8rem);
-    overflow-y: auto;
-  }
-
-  .game-grid-draft .court {
-    min-height: 340px;
-  }
-
-  .game-grid-draft .court-slot {
-    width: 94px;
-    height: 94px;
-  }
-
-  .game-grid-draft .court-core {
-    inset: 16px;
+    max-width: 104rem;
+    grid-template-columns: minmax(250px, 0.78fr) minmax(430px, 1.18fr) minmax(340px, 0.92fr);
+    gap: 1.25rem;
   }
 }

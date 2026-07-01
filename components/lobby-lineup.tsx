@@ -27,23 +27,6 @@ function playerName(state: PublicLobbyState, id: string | null | undefined) {
   return state.players.find((player) => player.id === id)?.name ?? "Unknown";
 }
 
-function progressSpin(state: PublicLobbyState, run: PublicRun) {
-  const match = state.activeMatch;
-  if (!match) return run.currentSpin;
-  if (match.mode === "snake") return match.currentTurnPlayerId === run.playerId ? match.currentSpin : null;
-  return run.currentSpin;
-}
-
-function rerollStatus(used: boolean, enabled: boolean) {
-  if (used) return "Used";
-  return enabled ? "Available" : "Off";
-}
-
-function standingLabel(standing: PublicLobbyState["standings"][number] | undefined) {
-  if (!standing) return "0W · 0L · 0T";
-  return `${standing.wins}W · ${standing.losses}L · ${standing.ties}T`;
-}
-
 function slotDetails(slot: LineupSlot) {
   return playerStatDetails(slot);
 }
@@ -175,43 +158,18 @@ export function MobileLineup({ lineup, selected, movingPosition, canPick, canMov
   );
 }
 
-export function Opponents({
-  state,
-  showStandings = false,
-  onNext,
-  isHost = false,
-  busy = false,
-}: {
-  state: PublicLobbyState;
-  showStandings?: boolean;
-  onNext?: () => void;
-  isHost?: boolean;
-  busy?: boolean;
-}) {
+export function Opponents({ state }: { state: PublicLobbyState }) {
   const match = state.activeMatch;
   if (!match) return null;
-  const standingsByPlayer = new Map(state.standings.map((standing) => [standing.playerId, standing]));
   return (
     <section className="panel panel-pad stack">
-      <div className="players-panel-head">
-        <p className="section-title">{showStandings ? "Players" : "Lobby Progress"}</p>
-        {showStandings ? <span className="eyebrow">{state.players.length} joined</span> : null}
-      </div>
+      <p className="section-title">Lobby Progress</p>
       {match.tiebreakerOf ? <div className="notice">Tiebreaker match: only tied players are drafting this round.</div> : null}
       {match.runs.map((run) => {
         const result = run.finalResult;
         const progress = Math.round((run.picks.length / 5) * 100);
-        const spin = progressSpin(state, run);
-        const rerollsEnabled = state.rerollsEnabled;
-        const spinLabel = spin ? `${spin.team} ${spin.era}` : result ? "Complete" : "No spin";
-        const standing = standingsByPlayer.get(run.playerId);
         return (
-          <div
-            className={`opponent-card ${match.mode === "snake" && match.currentTurnPlayerId === run.playerId ? "current-turn" : ""}`}
-            key={run.id}
-            aria-current={match.mode === "snake" && match.currentTurnPlayerId === run.playerId ? "true" : undefined}
-            data-testid={`progress-card-${run.playerId}`}
-          >
+          <div className={`opponent-card ${match.mode === "snake" && match.currentTurnPlayerId === run.playerId ? "current-turn" : ""}`} key={run.id} aria-current={match.mode === "snake" && match.currentTurnPlayerId === run.playerId ? "true" : undefined}>
             <div className="opponent-top">
               <div>
                 <p className="player-name">{playerName(state, run.playerId)}</p>
@@ -219,20 +177,13 @@ export function Opponents({
                   Round {run.round}/5 · ${run.budgetLeft} left · {run.status}
                 </p>
               </div>
-              <div className="opponent-status">
-                {showStandings ? <span className="standing-chip">{standingLabel(standing)}</span> : null}
-                {result ? (
-                  <strong className="grade">
-                    {result.wins}-{result.losses}
-                  </strong>
-                ) : (
-                  <span className="eyebrow progress-spin-label">{spinLabel}</span>
-                )}
-              </div>
-            </div>
-            <div className="progress-details">
-              <ProgressDetail label="Team reroll" value={rerollStatus(run.teamRerollUsed, rerollsEnabled)} used={run.teamRerollUsed} testId={`progress-team-reroll-${run.playerId}`} />
-              <ProgressDetail label="Decade reroll" value={rerollStatus(run.decadeRerollUsed, rerollsEnabled)} used={run.decadeRerollUsed} testId={`progress-decade-reroll-${run.playerId}`} />
+              {result ? (
+                <strong className="grade">
+                  {result.wins}-{result.losses}
+                </strong>
+              ) : (
+                <span className="eyebrow">{run.currentSpin ? `${run.currentSpin.team} ${run.currentSpin.era}` : "No spin"}</span>
+              )}
             </div>
             <div className="progress-bar" aria-hidden="true">
               <div className="progress-fill" style={{ width: `${progress}%` }} />
@@ -241,22 +192,7 @@ export function Opponents({
           </div>
         );
       })}
-      {showStandings && state.status === "results" && onNext ? (
-        <button className="btn primary" type="button" disabled={!isHost || busy} onClick={onNext}>
-          <RotateCcw size={17} />
-          Play Again
-        </button>
-      ) : null}
     </section>
-  );
-}
-
-function ProgressDetail({ label, value, used = false, testId }: { label: string; value: string; used?: boolean; testId: string }) {
-  return (
-    <div className={`progress-detail ${used ? "used" : ""}`} data-testid={testId}>
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
   );
 }
 
