@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createLobby, joinLobby, getLobbyState, applyLobbyAction } from "../lib/multiplayer";
 import { getPool, query } from "../lib/db";
 import { loadGamePack } from "../lib/game-data";
-import { POSITIONS, type Position, type PublicLobbyState } from "../lib/types";
+import { POSITIONS, type Position, type PublicLobbyState, type Spin } from "../lib/types";
 import { HARD_CAP_AMOUNT, salary, SOFT_CAP_AMOUNT } from "../lib/rules";
 
 loadEnvConfig(process.cwd());
@@ -100,24 +100,33 @@ async function verifySnakeDraft() {
   assert.equal(participants.length, 3);
 
   const observedOrder: string[] = [];
+  const firstMatch = state.activeMatch;
+  assert.ok(firstMatch, "snake match exists");
+  assert.ok(firstMatch.currentSpin, "initial snake spin exists");
+  const firstSpin = firstMatch.currentSpin;
+  const removedTeamEra = await query<{ count: number }>(
+    `DELETE FROM team_eras WHERE team = $1 AND era = $2 RETURNING count`,
+    [firstSpin.team, firstSpin.era],
+  );
+  assert.equal(removedTeamEra.rowCount, 1);
+
+  try {
+    assert.ok(firstMatch.currentTurnPlayerId, "current drafter exists");
+    observedOrder.push(firstMatch.currentTurnPlayerId);
+    state = await pickForCurrentSnakeDrafter(host.code, tokens, state);
+    assert.deepEqual(state.activeMatch?.currentSpin, firstSpin, "snake spin stays fixed until each player drafts from it");
+  } finally {
+    await restoreTeamEra(firstSpin, removedTeamEra.rows[0].count);
+  }
+
   for (let guard = 0; guard < 40; guard += 1) {
-    const match = state.activeMatch;
+    const match: PublicLobbyState["activeMatch"] = state.activeMatch;
     assert.ok(match, "snake match exists");
     if (state.status === "results") break;
-    const current = match.currentTurnPlayerId;
+    const current: string | null = match.currentTurnPlayerId;
     assert.ok(current, "current drafter exists");
     observedOrder.push(current);
-    const token = tokens[current];
-    const actorState = await getLobbyState(host.code, token);
-    const candidate = cheapestAssignable(actorState);
-    assert.ok(candidate, `assignable candidate for ${current}`);
-    state = await applyLobbyAction(host.code, {
-      token,
-      expectedVersion: actorState.stateVersion,
-      action: "pick",
-      playerSeasonId: candidate.id,
-      position: candidate.openPositions[0],
-    });
+    state = await pickForCurrentSnakeDrafter(host.code, tokens, state);
     if (state.status === "results") break;
   }
 
@@ -126,6 +135,31 @@ async function verifySnakeDraft() {
   const final = await getLobbyState(host.code, host.token);
   assert.equal(final.status, "results");
   assert.equal(final.activeMatch?.runs.every((run) => run.picks.length === 5), true);
+}
+
+async function pickForCurrentSnakeDrafter(code: string, tokens: TokenSet, state: PublicLobbyState): Promise<PublicLobbyState> {
+  const current = state.activeMatch?.currentTurnPlayerId;
+  assert.ok(current, "current drafter exists");
+  const token = tokens[current];
+  const actorState = await getLobbyState(code, token);
+  const candidate = cheapestAssignable(actorState);
+  assert.ok(candidate, `assignable candidate for ${current}`);
+  return applyLobbyAction(code, {
+    token,
+    expectedVersion: actorState.stateVersion,
+    action: "pick",
+    playerSeasonId: candidate.id,
+    position: candidate.openPositions[0],
+  });
+}
+
+async function restoreTeamEra(spin: Spin, count: number) {
+  await query(
+    `INSERT INTO team_eras(team, era, count)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (team, era) DO UPDATE SET count = excluded.count`,
+    [spin.team, spin.era, count],
+  );
 }
 
 function cheapestAssignable(state: PublicLobbyState) {
