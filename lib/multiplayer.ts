@@ -83,11 +83,12 @@ const JoinLobbySchema = z.object({
 const ActionSchema = z.object({
   token: z.string().min(16),
   expectedVersion: z.number().int().nonnegative().optional(),
-  action: z.enum(["settings", "start", "spin", "reroll-team", "reroll-decade", "pick", "next-match"]),
+  action: z.enum(["settings", "start", "spin", "reroll-team", "reroll-decade", "pick", "move-pick", "next-match"]),
   mode: z.enum(["parallel", "snake"]).optional(),
   capType: z.enum(["hard", "soft"]).optional(),
   rerollsEnabled: z.boolean().optional(),
   playerSeasonId: z.string().optional(),
+  fromPosition: z.enum(POSITIONS).optional(),
   position: z.enum(POSITIONS).optional(),
 });
 
@@ -338,6 +339,12 @@ async function createMatch(client: PoolClient, lobby: LobbyRow, participantIds: 
 async function applyParallelAction(client: PoolClient, lobby: LobbyRow, match: MatchRow, actor: LobbyPlayerRow, parsed: z.infer<typeof ActionSchema>) {
   const run = await requireRun(client, match.id, actor.id);
   if (run.status !== "active") throw new AppError(409, "run_not_active", "Your run is not active.");
+  if (parsed.action === "move-pick") {
+    const movedRun = await movePick(client, lobby, match, run, actor.id, parsed.fromPosition, parsed.position);
+    await autoLoseIfNoLegalPick(client, lobby, match, movedRun, false);
+    return;
+  }
+
   await autoLoseIfNoLegalPick(client, lobby, match, run, false);
   const freshRun = await requireRun(client, match.id, actor.id);
   if (freshRun.status !== "active") return;
@@ -368,6 +375,11 @@ async function applySnakeAction(client: PoolClient, lobby: LobbyRow, match: Matc
   const run = await requireRun(client, match.id, actor.id);
   if (run.status !== "active") throw new AppError(409, "run_not_active", "Your draft is not active.");
   const currentSpin = match.current_spin;
+
+  if (parsed.action === "move-pick") {
+    await movePick(client, lobby, match, run, actor.id, parsed.fromPosition, parsed.position);
+    return;
+  }
 
   if (parsed.action === "spin") {
     if (currentSpin) throw new AppError(409, "spin_already_active", "Pick from the current spin before spinning again.");
@@ -518,6 +530,41 @@ async function placePick(
   }
 
   await recordEvent(client, lobby.id, match.id, playerId, "pick.made", { player: player.player_name, position, cost: player.cost });
+}
+
+async function movePick(
+  client: PoolClient,
+  lobby: LobbyRow,
+  match: MatchRow,
+  run: RunRow,
+  playerId: string,
+  fromPosition: Position | undefined,
+  position: Position | undefined,
+) {
+  if (!fromPosition || !position) throw new AppError(400, "missing_move", "A source and target position are required.");
+  if (fromPosition === position) throw new AppError(400, "same_position", "Pick a different position.");
+  if (!POSITIONS.includes(fromPosition) || !POSITIONS.includes(position)) throw new AppError(400, "bad_position", "Invalid position.");
+
+  const slot = run.lineup[fromPosition];
+  if (!slot) throw new AppError(409, "source_empty", "There is no player in that lineup slot.");
+  if (run.lineup[position]) throw new AppError(409, "position_filled", "That lineup slot is already filled.");
+  if (!slot.positions.includes(position)) throw new AppError(409, "wrong_position", "Player cannot play that position.");
+
+  const lineup = { ...run.lineup };
+  delete lineup[fromPosition];
+  lineup[position] = { ...slot, position };
+
+  await client.query(
+    `UPDATE runs SET lineup = $2::jsonb, updated_at = now() WHERE id = $1`,
+    [run.id, JSON.stringify(lineup)],
+  );
+  await client.query(
+    `UPDATE picks SET position = $3 WHERE run_id = $1 AND player_season_id = $2`,
+    [run.id, slot.playerId, position],
+  );
+  await recordEvent(client, lobby.id, match.id, playerId, "pick.moved", { player: slot.player, fromPosition, position });
+
+  return { ...run, lineup };
 }
 
 async function autoLoseIfNoLegalPick(client: PoolClient, lobby: LobbyRow, match: MatchRow, run: RunRow, shared: boolean) {

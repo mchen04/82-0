@@ -13,6 +13,7 @@ type TokenSet = Record<string, string>;
 async function main() {
   await verifyCapAmounts();
   await verifyStaleAction();
+  await verifyLineupMove();
   await verifyParallelTie();
   await verifySnakeDraft();
   await getPool().end();
@@ -66,6 +67,26 @@ async function verifyParallelTie() {
   assert.equal(tiedState.activeMatch?.roundNo, 2);
   assert.equal(Boolean(tiedState.activeMatch?.tiebreakerOf), true);
   assert.deepEqual(new Set(tiedState.activeMatch?.participantIds), new Set([host.playerId, guest.playerId]));
+}
+
+async function verifyLineupMove() {
+  const host = await createLobby({ name: "Move A", mode: "parallel", capType: "hard", rerollsEnabled: true });
+  await joinLobby(host.code, { name: "Move B" });
+  let state = await getLobbyState(host.code, host.token);
+  state = await applyLobbyAction(host.code, { token: host.token, expectedVersion: state.stateVersion, action: "start" });
+
+  const pick = cheapestMovablePick();
+  const [fromPosition, toPosition] = pick.player.positions;
+  assert.ok(fromPosition && toPosition, "movable player has two positions");
+  state = await forceSpinAndPick(host.code, host.token, pick.player.id, fromPosition, pick.player.team, pick.player.era);
+  state = await applyLobbyAction(host.code, { token: host.token, expectedVersion: state.stateVersion, action: "move-pick", fromPosition, position: toPosition });
+
+  const run = state.activeMatch?.runs.find((candidate) => candidate.playerId === state.viewerPlayerId);
+  assert.ok(run, "viewer run exists after move");
+  assert.equal(run.lineup[fromPosition], undefined);
+  assert.equal(run.lineup[toPosition]?.playerId, pick.player.id);
+  assert.equal(run.lineup[toPosition]?.position, toPosition);
+  assert.equal(run.picks.find((slot) => slot.playerId === pick.player.id)?.position, toPosition);
 }
 
 async function forceSpinAndPick(code: string, token: string, playerSeasonId: string, position: Position, team: string, era: string) {
@@ -164,6 +185,15 @@ async function restoreTeamEra(spin: Spin, count: number) {
 
 function cheapestAssignable(state: PublicLobbyState) {
   return [...(state.activeMatch?.candidates ?? [])].filter((candidate) => candidate.assignable).sort((a, b) => a.cost - b.cost || a.player.localeCompare(b.player))[0];
+}
+
+function cheapestMovablePick() {
+  const player = loadGamePack().players
+    .filter((candidate) => candidate.positions.length >= 2)
+    .map((candidate) => ({ player: candidate, cost: salary(candidate) }))
+    .sort((a, b) => a.cost - b.cost || a.player.player.localeCompare(b.player.player))[0];
+  assert.ok(player, "multi-position player exists");
+  return player;
 }
 
 function cheapestLineup() {
