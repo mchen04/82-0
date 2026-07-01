@@ -278,9 +278,10 @@ async function startNextMatch(client: PoolClient, lobby: LobbyRow, actor: LobbyP
 }
 
 async function createMatch(client: PoolClient, lobby: LobbyRow, participantIds: string[] | null, roundNo: number, tiebreakerOf?: string) {
-  const players = participantIds
+  const basePlayers = participantIds
     ? participantIds
     : (await getActiveLobbyPlayers(client, lobby.id)).rows.map((player) => player.id);
+  const players = lobby.mode === "snake" ? rotateForRandomSnakeStarter(basePlayers) : basePlayers;
   if (players.length < 2) throw new AppError(409, "not_enough_players", "At least two players are required.");
 
   const matchId = id();
@@ -305,6 +306,13 @@ async function createMatch(client: PoolClient, lobby: LobbyRow, participantIds: 
   );
   await recordEvent(client, lobby.id, matchId, null, tiebreakerOf ? "match.tiebreaker_started" : "match.started", { participantIds: players });
   if (lobby.mode === "snake") await advanceSnakeTurn(client, { ...lobby, active_match_id: matchId }, matchId);
+}
+
+function rotateForRandomSnakeStarter(players: string[]) {
+  if (players.length < 2) return players;
+  const starter = pickRandom(players);
+  const starterIndex = players.indexOf(starter);
+  return [...players.slice(starterIndex), ...players.slice(0, starterIndex)];
 }
 
 async function applyParallelAction(client: PoolClient, lobby: LobbyRow, match: MatchRow, actor: LobbyPlayerRow, parsed: z.infer<typeof ActionSchema>) {

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { RotateCcw } from "lucide-react";
 import { initials } from "@/lib/rules";
+import { playerStatDetails } from "@/lib/player-details";
 import {
   POSITIONS,
   type Candidate,
@@ -27,7 +28,7 @@ function playerName(state: PublicLobbyState, id: string | null | undefined) {
 }
 
 function slotDetails(slot: LineupSlot) {
-  return `${slot.player} · ${slot.team} · ${slot.era} · $${slot.cost}`;
+  return playerStatDetails(slot);
 }
 
 function canMoveTo(lineup: Partial<Record<Position, LineupSlot>>, fromPosition: Position, position: Position) {
@@ -60,6 +61,7 @@ export function Court({ lineup, selected, movingPosition, canPick, canMove, onPi
             disabled={!available && !slot}
             aria-disabled={!available && !moveSource}
             aria-label={details ?? `${position} slot`}
+            title={details}
             draggable={moveSource}
             onClick={moveTarget && movingPosition ? () => onMove(movingPosition, position) : pickTarget ? () => onPick(position) : moveSource ? () => onStartMove(position) : undefined}
             onDragStart={
@@ -67,7 +69,7 @@ export function Court({ lineup, selected, movingPosition, canPick, canMove, onPi
                 ? (event) => {
                     event.dataTransfer.effectAllowed = "move";
                     event.dataTransfer.setData("text/plain", position);
-                    onStartMove(position);
+                    if (movingPosition !== position) onStartMove(position);
                   }
                 : undefined
             }
@@ -137,6 +139,7 @@ export function MobileLineup({ lineup, selected, movingPosition, canPick, canMov
               disabled={!available && !slot}
               aria-disabled={!available && !moveSource}
               aria-label={details ?? `${position} slot`}
+              title={details}
               onClick={moveTarget && movingPosition ? () => onMove(movingPosition, position) : pickTarget ? () => onPick(position) : moveSource ? () => onStartMove(position) : undefined}
               data-testid={`mobile-slot-${position}`}
             >
@@ -166,7 +169,7 @@ export function Opponents({ state }: { state: PublicLobbyState }) {
         const result = run.finalResult;
         const progress = Math.round((run.picks.length / 5) * 100);
         return (
-          <div className="opponent-card" key={run.id}>
+          <div className={`opponent-card ${match.mode === "snake" && match.currentTurnPlayerId === run.playerId ? "current-turn" : ""}`} key={run.id} aria-current={match.mode === "snake" && match.currentTurnPlayerId === run.playerId ? "true" : undefined}>
             <div className="opponent-top">
               <div>
                 <p className="player-name">{playerName(state, run.playerId)}</p>
@@ -232,21 +235,6 @@ export function Standings({ state, onNext, isHost, busy }: { state: PublicLobbyS
           Play Again
         </button>
       ) : null}
-    </section>
-  );
-}
-
-export function Events({ state }: { state: PublicLobbyState }) {
-  return (
-    <section className="panel panel-pad stack">
-      <p className="section-title">Event History</p>
-      {state.events.slice(0, 8).map((event) => (
-        <div className="event-row" key={event.id}>
-          <p className="eyebrow">
-            {new Date(event.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · {event.type}
-          </p>
-        </div>
-      ))}
     </section>
   );
 }

@@ -31,18 +31,28 @@ async function main() {
     await assertFilled(seed.fromPosition, seed.player);
     await assertDisabled(seed.toPosition);
     await assertDisabled("C");
+    await waitForPage(`
+      if (document.body.textContent.includes('Event History')) throw new Error('event history panel should not render');
+    `);
 
     await evalPage(`document.querySelector('[data-testid="court-slot-${seed.fromPosition}"]')?.focus();`);
     await waitForPage(`
       const tooltip = document.querySelector('[data-testid="court-slot-${seed.fromPosition}"] .initials-tooltip');
       const style = getComputedStyle(tooltip, '::after');
       if (!tooltip?.getAttribute('data-tooltip')?.includes(${JSON.stringify(seed.player)})) throw new Error('tooltip data missing player name');
+      if (!tooltip?.getAttribute('data-tooltip')?.includes('OVR')) throw new Error('tooltip data missing overall');
+      if (!tooltip?.getAttribute('data-tooltip')?.includes('CRE')) throw new Error('tooltip data missing creation rating');
+      if (!tooltip?.getAttribute('data-tooltip')?.includes('TO')) throw new Error('tooltip data missing turnover rating');
       if (!style.content.includes(${JSON.stringify(seed.player)})) throw new Error('tooltip details missing player name');
     `);
 
     await browser("click", `[data-testid="court-slot-${seed.fromPosition}"]`);
     await waitForPage(enabledScript(seed.toPosition));
     await assertDisabled("C");
+    await browser("click", `[data-testid="court-slot-${seed.fromPosition}"]`);
+    await assertDisabled(seed.toPosition);
+    await browser("click", `[data-testid="court-slot-${seed.fromPosition}"]`);
+    await waitForPage(enabledScript(seed.toPosition));
 
     await browser("click", `[data-testid="court-slot-${seed.toPosition}"]`);
     await waitForPage(filledScript(seed.toPosition, seed.player));
@@ -105,6 +115,16 @@ async function main() {
       if (!document.body.textContent.includes('No matches.')) throw new Error('no-result search state missing');
     `);
 
+    const snake = await seedSnakeLobby();
+    await browser("open", `http://127.0.0.1:${port}/lobby/${snake.code}`);
+    await evalPage(`localStorage.setItem(${JSON.stringify(`better82:${snake.code}:token`)}, ${JSON.stringify(snake.token)}); location.reload();`);
+    await waitForPage(`
+      const highlighted = [...document.querySelectorAll('.opponent-card.current-turn')];
+      if (highlighted.length !== 1) throw new Error('current turn should highlight exactly one lobby progress card');
+      if (!highlighted[0].textContent.includes(${JSON.stringify(snake.currentPlayerName)})) throw new Error('current turn highlight is on the wrong player');
+      if (document.body.textContent.includes('Event History')) throw new Error('event history panel should not render in snake draft');
+    `);
+
     console.log("Lineup UI verification passed.");
   } finally {
     await browser("close").catch(() => undefined);
@@ -146,6 +166,18 @@ async function seedLobby() {
     swap,
     searchSpin: { team: searchPlayer.team, era: searchPlayer.era },
   };
+}
+
+async function seedSnakeLobby() {
+  const host = await createLobby({ name: "Turn A", mode: "snake", capType: "hard", rerollsEnabled: true });
+  const guest = await joinLobby(host.code, { name: "Turn B" });
+  let state = await getLobbyState(host.code, host.token);
+  state = await applyLobbyAction(host.code, { token: host.token, expectedVersion: state.stateVersion, action: "start" });
+  const currentPlayerId = state.activeMatch?.currentTurnPlayerId;
+  assert.ok(currentPlayerId, "snake current drafter exists");
+  const currentPlayerName = currentPlayerId === host.playerId ? "Turn A" : currentPlayerId === guest.playerId ? "Turn B" : "";
+  assert.ok(currentPlayerName, "snake current drafter is in lobby");
+  return { code: host.code, token: host.token, currentPlayerName };
 }
 
 function swappablePair(excludedIds: Set<string>) {
