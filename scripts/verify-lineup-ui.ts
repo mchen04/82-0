@@ -114,6 +114,9 @@ async function main() {
         if (card.hasAttribute('title')) throw new Error('candidate card should not have native hover title');
       }
     `);
+    await browser("set", "viewport", "1024", "800");
+    await assertDraftBoardVerticalOnly();
+    await browser("set", "viewport", "1280", "900");
     await evalPage(`
       const input = document.querySelector('[aria-label="Search players"]');
       const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
@@ -341,6 +344,30 @@ async function assertDisabled(position: string) {
     const slot = document.querySelector('[data-testid="court-slot-${position}"]');
     if (!slot) throw new Error('missing ${position} slot');
     if (!slot.disabled) throw new Error('${position} should be disabled');
+  `);
+}
+
+async function assertDraftBoardVerticalOnly() {
+  await waitForPage(`
+    const targets = [
+      ['draft board', document.querySelector('.draft-board')],
+      ['position filters', document.querySelector('.draft-board .position-filter-row')],
+      ['candidate list', document.querySelector('.draft-board .candidate-list')],
+    ];
+    for (const [name, element] of targets) {
+      if (!element) throw new Error(name + ' missing');
+      const style = getComputedStyle(element);
+      if (style.overflowX !== 'hidden' && style.overflowX !== 'clip') {
+        throw new Error(name + ' exposes horizontal overflow: ' + style.overflowX);
+      }
+      if (element.scrollWidth > element.clientWidth + 1) {
+        throw new Error(name + ' has horizontal overflow: ' + element.scrollWidth + ' > ' + element.clientWidth);
+      }
+    }
+    const listStyle = getComputedStyle(document.querySelector('.draft-board .candidate-list'));
+    if (listStyle.overflowY !== 'auto' && listStyle.overflowY !== 'scroll') {
+      throw new Error('candidate list should keep vertical scrolling');
+    }
   `);
 }
 
