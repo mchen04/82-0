@@ -401,20 +401,6 @@ a {
   line-height: 1;
 }
 
-.spin-meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin-top: 1rem;
-  color: #525252;
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 0.72rem;
-  font-weight: 800;
-  text-transform: uppercase;
-}
-
 .filters {
   display: grid;
   grid-template-columns: 1fr;
@@ -429,10 +415,10 @@ a {
 
 .position-filter-row {
   display: grid;
-  grid-template-columns: repeat(6, minmax(2.75rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(2.75rem, 1fr));
   width: 100%;
   gap: 0.5rem;
-  overflow-x: auto;
+  overflow-x: hidden;
   padding-bottom: 0.15rem;
 }
 
@@ -473,6 +459,7 @@ a {
 .candidate-list {
   display: grid;
   max-height: 560px;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: 0.85rem;
   gap: 0.75rem;
@@ -701,7 +688,9 @@ a {
   position: relative;
 }
 
-.initials-tooltip::after {
+.lineup-tooltip {
+  --tooltip-shift-x: -50%;
+  --tooltip-nudge-x: 0px;
   position: absolute;
   bottom: calc(100% + 0.45rem);
   left: 50%;
@@ -713,7 +702,6 @@ a {
   background: var(--chalk);
   color: var(--ink);
   box-shadow: 3px 3px 0 var(--ink);
-  content: attr(data-tooltip);
   font-family: "IBM Plex Mono", ui-monospace, monospace;
   font-size: 0.68rem;
   font-weight: 900;
@@ -722,21 +710,44 @@ a {
   pointer-events: none;
   text-align: left;
   text-transform: none;
-  transform: translate(-50%, 0.25rem);
+  transform: translate(calc(var(--tooltip-shift-x) + var(--tooltip-nudge-x)), 0.25rem);
   transition: opacity 0.12s, transform 0.12s;
   white-space: pre-line;
+  overflow-wrap: break-word;
 }
 
-.initials-tooltip:hover::after,
-.initials-tooltip:focus-visible::after,
-.court-slot[data-tooltip]:focus .initials-tooltip::after,
-.court-slot[data-tooltip]:hover .initials-tooltip::after,
-.court-slot[data-tooltip]:focus-visible .initials-tooltip::after,
-.mobile-slot:focus .initials-tooltip::after,
-.mobile-slot:hover .initials-tooltip::after,
-.mobile-slot:focus-visible .initials-tooltip::after {
+.lineup-tooltip[data-placement="below"] {
+  top: calc(100% + 0.45rem);
+  bottom: auto;
+}
+
+.court-slot.SF .lineup-tooltip,
+.court-slot.C .lineup-tooltip,
+.mobile-slot:first-child .lineup-tooltip,
+.mobile-slot:nth-child(2) .lineup-tooltip {
+  --tooltip-shift-x: 0px;
+  left: 0;
+}
+
+.court-slot.SG .lineup-tooltip,
+.court-slot.PF .lineup-tooltip,
+.mobile-slot:nth-last-child(1) .lineup-tooltip,
+.mobile-slot:nth-last-child(2) .lineup-tooltip {
+  --tooltip-shift-x: 0px;
+  right: 0;
+  left: auto;
+}
+
+.initials-tooltip:hover .lineup-tooltip,
+.initials-tooltip:focus-visible .lineup-tooltip,
+.court-slot:focus .lineup-tooltip,
+.court-slot:hover .lineup-tooltip,
+.court-slot:focus-visible .lineup-tooltip,
+.mobile-slot:focus .lineup-tooltip,
+.mobile-slot:hover .lineup-tooltip,
+.mobile-slot:focus-visible .lineup-tooltip {
   opacity: 1;
-  transform: translate(-50%, 0);
+  transform: translate(calc(var(--tooltip-shift-x) + var(--tooltip-nudge-x)), 0);
 }
 
 .court-label {
@@ -814,6 +825,8 @@ a {
 
 .mobile-initials {
   display: grid;
+  width: 100%;
+  height: 100%;
   place-items: center;
 }
 
@@ -1025,6 +1038,10 @@ a {
   .draft-board,
   .game-grid-draft .side {
     min-width: 0;
+  }
+
+  .draft-board {
+    overflow-x: hidden;
   }
 
   .game-grid-draft .candidate-list {
