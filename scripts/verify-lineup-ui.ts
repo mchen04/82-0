@@ -34,12 +34,15 @@ async function main() {
     await waitForPage(`
       if (document.body.textContent.includes('Event History')) throw new Error('event history panel should not render');
     `);
+    await assertSpinMetaRemoved();
 
     await evalPage(`document.querySelector('[data-testid="court-slot-${seed.fromPosition}"]')?.focus();`);
     await waitForPage(`
-      const tooltip = document.querySelector('[data-testid="court-slot-${seed.fromPosition}"] .initials-tooltip');
-      const style = getComputedStyle(tooltip, '::after');
-      const details = tooltip?.getAttribute('data-tooltip') ?? '';
+      const slot = document.querySelector('[data-testid="court-slot-${seed.fromPosition}"]');
+      const tooltip = slot?.querySelector('.lineup-tooltip');
+      const details = tooltip?.textContent ?? '';
+      if (!tooltip) throw new Error('lineup tooltip missing');
+      if (slot.hasAttribute('title')) throw new Error('court slot should not use native title tooltip');
       if (!details.includes(${JSON.stringify(seed.player)})) throw new Error('tooltip data missing player name');
       if (!details.includes(${JSON.stringify(seed.fromPosition)})) throw new Error('tooltip data missing player position');
       if (!details.includes(${JSON.stringify(seed.team)})) throw new Error('tooltip data missing player team');
@@ -50,8 +53,8 @@ async function main() {
       for (const label of ['OVR', 'CRE', 'SCO', 'EFF', 'REB', 'RIM', 'SPG', 'BPG', 'SG', 'OG', 'TO']) {
         if (details.includes(label)) throw new Error('tooltip has extra stat ' + label);
       }
-      if (!style.content.includes(${JSON.stringify(seed.player)})) throw new Error('tooltip details missing player name');
     `);
+    await assertLineupTooltipsStayInViewport("court-slot");
 
     await browser("click", `[data-testid="court-slot-${seed.fromPosition}"]`);
     await waitForPage(enabledScript(seed.toPosition));
@@ -139,10 +142,16 @@ async function main() {
       if (!hostCard) throw new Error('finished host lobby progress card missing');
       if (!hostCard.textContent.includes(${JSON.stringify(`${finished.wins}-${finished.losses}`)})) throw new Error('finished score missing from lobby progress');
     `);
+    await browser("set", "viewport", "1280", "900");
+    await assertLineupTooltipsStayInViewport("court-slot");
+    await browser("set", "viewport", "390", "780");
+    await assertLineupTooltipsStayInViewport("mobile-slot");
+    await browser("set", "viewport", "1280", "900");
 
     const snake = await seedSnakeLobby();
     await browser("open", `http://127.0.0.1:${port}/lobby/${snake.code}`);
     await evalPage(`localStorage.setItem(${JSON.stringify(`better82:${snake.code}:token`)}, ${JSON.stringify(snake.token)}); location.reload();`);
+    await assertSpinMetaRemoved();
     await waitForPage(`
       const cards = [...document.querySelectorAll('.opponent-card')];
       const names = cards.map((card) => card.querySelector('.player-name')?.textContent?.trim());
@@ -344,6 +353,45 @@ async function assertDisabled(position: string) {
     const slot = document.querySelector('[data-testid="court-slot-${position}"]');
     if (!slot) throw new Error('missing ${position} slot');
     if (!slot.disabled) throw new Error('${position} should be disabled');
+  `);
+}
+
+async function assertSpinMetaRemoved() {
+  await waitForPage(`
+    if (document.querySelector('.spin-meta')) throw new Error('spin metadata should not render');
+    const pageText = document.body.textContent ?? '';
+    for (const removedText of ['picks left', 'Turn:', 'Independent run']) {
+      if (pageText.includes(removedText)) throw new Error('removed spin metadata is still visible: ' + removedText);
+    }
+  `);
+}
+
+async function assertLineupTooltipsStayInViewport(testIdPrefix: "court-slot" | "mobile-slot") {
+  const selectors = POSITIONS.map((position) => `[data-testid="${testIdPrefix}-${position}"]`);
+  await waitForPage(`
+    const selectors = ${JSON.stringify(selectors)};
+    let checked = 0;
+    for (const selector of selectors) {
+      const slot = document.querySelector(selector);
+      if (!slot) throw new Error('missing lineup slot ' + selector);
+      if (slot.hasAttribute('title')) throw new Error('lineup slot should not use native title tooltip: ' + selector);
+      const tooltip = slot.querySelector('.lineup-tooltip');
+      if (!tooltip) continue;
+      checked += 1;
+      slot.focus();
+      const rect = tooltip.getBoundingClientRect();
+      if (rect.left < -0.5 || rect.top < -0.5 || rect.right > window.innerWidth + 0.5 || rect.bottom > window.innerHeight + 0.5) {
+        throw new Error('lineup tooltip escapes viewport for ' + selector + ': ' + JSON.stringify({
+          left: rect.left,
+          top: rect.top,
+          right: rect.right,
+          bottom: rect.bottom,
+          width: window.innerWidth,
+          height: window.innerHeight,
+        }));
+      }
+    }
+    if (!checked) throw new Error('no lineup tooltips were checked for ' + ${JSON.stringify(testIdPrefix)});
   `);
 }
 

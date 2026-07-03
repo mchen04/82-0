@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { FocusEvent, MouseEvent, ReactNode } from "react";
 import { RotateCcw } from "lucide-react";
 import { initials } from "@/lib/rules";
 import { playerStatDetails } from "@/lib/player-details";
@@ -22,6 +22,8 @@ type LineupPickerProps = {
   onMove: (fromPosition: Position, position: Position) => void;
 };
 
+const TOOLTIP_VIEWPORT_MARGIN = 8;
+
 function playerName(state: PublicLobbyState, id: string | null | undefined) {
   if (!id) return "Unknown";
   return state.players.find((player) => player.id === id)?.name ?? "Unknown";
@@ -43,6 +45,28 @@ function canMoveFrom(lineup: Partial<Record<Position, LineupSlot>>, position: Po
   return POSITIONS.some((target) => canMoveTo(lineup, position, target));
 }
 
+function keepLineupTooltipInViewport(event: FocusEvent<HTMLButtonElement> | MouseEvent<HTMLButtonElement>) {
+  const tooltip = event.currentTarget.querySelector<HTMLElement>(".lineup-tooltip");
+  if (!tooltip) return;
+
+  tooltip.style.setProperty("--tooltip-nudge-x", "0px");
+  tooltip.dataset.placement = "above";
+
+  let rect = tooltip.getBoundingClientRect();
+  if (rect.top < TOOLTIP_VIEWPORT_MARGIN) {
+    tooltip.dataset.placement = "below";
+    rect = tooltip.getBoundingClientRect();
+  }
+
+  let nudge = 0;
+  if (rect.left < TOOLTIP_VIEWPORT_MARGIN) {
+    nudge = TOOLTIP_VIEWPORT_MARGIN - rect.left;
+  } else if (rect.right > window.innerWidth - TOOLTIP_VIEWPORT_MARGIN) {
+    nudge = window.innerWidth - TOOLTIP_VIEWPORT_MARGIN - rect.right;
+  }
+  tooltip.style.setProperty("--tooltip-nudge-x", `${nudge}px`);
+}
+
 export function Court({ lineup, selected, movingPosition, canPick, canMove, onPick, onStartMove, onMove }: LineupPickerProps) {
   return (
     <section className="court">
@@ -61,8 +85,9 @@ export function Court({ lineup, selected, movingPosition, canPick, canMove, onPi
             disabled={!available && !slot}
             aria-disabled={!available && !moveSource}
             aria-label={details ?? `${position} slot`}
-            title={details}
             draggable={moveSource}
+            onFocus={keepLineupTooltipInViewport}
+            onMouseEnter={keepLineupTooltipInViewport}
             onClick={moveTarget && movingPosition ? () => onMove(movingPosition, position) : pickTarget ? () => onPick(position) : moveSource ? () => onStartMove(position) : undefined}
             onDragStart={
               moveSource
@@ -91,7 +116,6 @@ export function Court({ lineup, selected, movingPosition, canPick, canMove, onPi
                   }
                 : undefined
             }
-            data-tooltip={details}
             data-testid={`court-slot-${position}`}
           >
             <span className="court-ring" aria-hidden="true" />
@@ -114,8 +138,11 @@ export function Court({ lineup, selected, movingPosition, canPick, canMove, onPi
 function PlayerInitials({ slot, className, children }: { slot: LineupSlot; className: string; children: ReactNode }) {
   const details = slotDetails(slot);
   return (
-    <span className={`${className} initials-tooltip`} aria-label={details} data-tooltip={details}>
+    <span className={`${className} initials-tooltip`} aria-label={details}>
       {children}
+      <span className="lineup-tooltip" aria-hidden="true">
+        {details}
+      </span>
     </span>
   );
 }
@@ -139,7 +166,8 @@ export function MobileLineup({ lineup, selected, movingPosition, canPick, canMov
               disabled={!available && !slot}
               aria-disabled={!available && !moveSource}
               aria-label={details ?? `${position} slot`}
-              title={details}
+              onFocus={keepLineupTooltipInViewport}
+              onMouseEnter={keepLineupTooltipInViewport}
               onClick={moveTarget && movingPosition ? () => onMove(movingPosition, position) : pickTarget ? () => onPick(position) : moveSource ? () => onStartMove(position) : undefined}
               data-testid={`mobile-slot-${position}`}
             >

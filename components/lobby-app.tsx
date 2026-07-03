@@ -23,11 +23,6 @@ function tokenKey(code: string) {
   return `better82:${code.toUpperCase()}:token`;
 }
 
-function playerName(state: PublicLobbyState | null, id: string | null | undefined) {
-  if (!state || !id) return "Unknown";
-  return state.players.find((player) => player.id === id)?.name ?? "Unknown";
-}
-
 export function LobbyApp({ code }: { code: string }) {
   const [token, setToken] = useState<string | null>(null);
   const [name, setName] = useState("Friend");
@@ -410,10 +405,6 @@ function SpinPanel({
           <p className="spin-card-label">Decade</p>
           <p className="spin-value">{spin?.era ?? "???"}</p>
         </div>
-      </div>
-      <div className="spin-meta">
-        <span>{localRun ? `${Math.max(0, 5 - localRun.picks.length)} picks left` : "Waiting"}</span>
-        <span>{match?.mode === "snake" ? `Turn: ${playerName(state, match.currentTurnPlayerId)}` : "Independent run"}</span>
       </div>
       <div className="spin-actions">
         <button className="btn" type="button" disabled={busy || !canAct || !spin || !rerollsAllowed || Boolean(localRun?.teamRerollUsed)} onClick={() => onAction("reroll-team")}>
