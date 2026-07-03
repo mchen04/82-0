@@ -45,7 +45,7 @@ function canMoveFrom(lineup: Partial<Record<Position, LineupSlot>>, position: Po
   return POSITIONS.some((target) => canMoveTo(lineup, position, target));
 }
 
-function keepLineupTooltipInViewport(event: FocusEvent<HTMLButtonElement> | MouseEvent<HTMLButtonElement>) {
+function keepLineupTooltipInViewport(event: FocusEvent<HTMLElement> | MouseEvent<HTMLElement>) {
   const tooltip = event.currentTarget.querySelector<HTMLElement>(".lineup-tooltip");
   if (!tooltip) return;
 
@@ -138,7 +138,7 @@ export function Court({ lineup, selected, movingPosition, canPick, canMove, onPi
 function PlayerInitials({ slot, className, children }: { slot: LineupSlot; className: string; children: ReactNode }) {
   const details = slotDetails(slot);
   return (
-    <span className={`${className} initials-tooltip`} aria-label={details}>
+    <span className={`${className} initials-tooltip`} aria-label={details} onFocus={keepLineupTooltipInViewport} onMouseEnter={keepLineupTooltipInViewport}>
       {children}
       <span className="lineup-tooltip" aria-hidden="true">
         {details}
