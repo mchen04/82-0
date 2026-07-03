@@ -144,6 +144,7 @@ async function main() {
     `);
     await browser("set", "viewport", "1280", "900");
     await assertLineupTooltipsStayInViewport("court-slot");
+    await assertLobbyProgressTooltipsStayInViewport();
     await browser("set", "viewport", "390", "780");
     await assertLineupTooltipsStayInViewport("mobile-slot");
     await browser("set", "viewport", "1280", "900");
@@ -392,6 +393,30 @@ async function assertLineupTooltipsStayInViewport(testIdPrefix: "court-slot" | "
       }
     }
     if (!checked) throw new Error('no lineup tooltips were checked for ' + ${JSON.stringify(testIdPrefix)});
+  `);
+}
+
+async function assertLobbyProgressTooltipsStayInViewport() {
+  await waitForPage(`
+    const slots = [...document.querySelectorAll('.opponent-card .lineup-mini .mini-slot.filled')];
+    if (!slots.length) throw new Error('lobby progress filled mini slots missing');
+    for (const slot of slots) {
+      if (slot.hasAttribute('title')) throw new Error('lobby progress mini slot should not use native title tooltip');
+      const tooltip = slot.querySelector('.lineup-tooltip');
+      if (!tooltip) throw new Error('lobby progress mini slot tooltip missing');
+      slot.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, cancelable: true }));
+      const rect = tooltip.getBoundingClientRect();
+      if (rect.left < -0.5 || rect.top < -0.5 || rect.right > window.innerWidth + 0.5 || rect.bottom > window.innerHeight + 0.5) {
+        throw new Error('lobby progress tooltip escapes viewport: ' + JSON.stringify({
+          left: rect.left,
+          top: rect.top,
+          right: rect.right,
+          bottom: rect.bottom,
+          width: window.innerWidth,
+          height: window.innerHeight,
+        }));
+      }
+    }
   `);
 }
 
