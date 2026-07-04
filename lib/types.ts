@@ -85,6 +85,18 @@ export type LineupSlot = {
 
 export type Lineup = Partial<Record<Position, LineupSlot>>;
 
+export type LineupPlacementMove = {
+  playerId: string;
+  player: string;
+  fromPosition: Position;
+  position: Position;
+};
+
+export type LineupPlacementOption = {
+  position: Position;
+  moves: LineupPlacementMove[];
+};
+
 export type ProjectedResult = {
   team_ovr: number;
   wins: number;
@@ -109,6 +121,7 @@ export type Candidate = {
   assignable: boolean;
   affordable: boolean;
   openPositions: Position[];
+  placementOptions: LineupPlacementOption[];
 };
 
 export type PublicPlayer = {

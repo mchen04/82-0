@@ -8,7 +8,7 @@ import {
   type PlayerSeasonRow,
   type RunRow,
 } from "./lobby-repository";
-import { maxLegalCost, openPositions, selectedPlayerIds, slotCount } from "./rules";
+import { legalPlacementOptions, maxLegalCost, selectedPlayerIds, slotCount } from "./rules";
 import { POSITIONS, type Candidate, type PublicMatch, type PublicRun, type Spin } from "./types";
 
 export async function buildPublicMatch(client: DbClient, lobby: LobbyRow, matchId: string, viewerPlayerId: string | null): Promise<PublicMatch | null> {
@@ -44,7 +44,6 @@ export async function buildPublicMatch(client: DbClient, lobby: LobbyRow, matchI
 async function buildCandidates(client: DbClient, lobby: LobbyRow, match: MatchRow, run: RunRow | null, spin: Spin | null, shared: boolean): Promise<Candidate[]> {
   if (!spin || !run || run.status !== "active") return [];
   const excluded = shared ? await selectedIdsForMatch(client, match.id) : selectedPlayerIds(run.lineup);
-  const open = openPositions(run.lineup);
   const maxCost = maxLegalCost(lobby.cap_type, lobby.cap_amount, run.cap_spent, slotCount(run.lineup));
   const result = await client.query<PlayerSeasonRow>(
     `SELECT player_id, player_name, team, era, positions, cost, data
@@ -55,8 +54,8 @@ async function buildCandidates(client: DbClient, lobby: LobbyRow, match: MatchRo
   );
   return result.rows.map((row) => {
     const player = row.data;
-    const openForPlayer = player.positions.filter((position) => open.includes(position));
     const affordable = lobby.cap_type === "soft" || row.cost <= maxCost;
+    const placementOptions = affordable ? legalPlacementOptions(run.lineup, player) : [];
     return {
       id: row.player_id,
       player: row.player_name,
@@ -67,9 +66,10 @@ async function buildCandidates(client: DbClient, lobby: LobbyRow, match: MatchRo
       perGame: player.perGame,
       ratings: player.ratings,
       cost: row.cost,
-      assignable: openForPlayer.length > 0 && affordable,
+      assignable: placementOptions.length > 0,
       affordable,
-      openPositions: openForPlayer,
+      openPositions: placementOptions.map((option) => option.position),
+      placementOptions,
     };
   });
 }
