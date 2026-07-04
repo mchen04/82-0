@@ -31,6 +31,7 @@ const CreateLobbySchema = z.object({
   mode: z.enum(["parallel", "snake"]).default("parallel"),
   capType: z.enum(["hard", "soft"]).default("hard"),
   rerollsEnabled: z.boolean().default(true),
+  tiannaMode: z.boolean().default(false),
 });
 
 const JoinLobbySchema = z.object({
@@ -44,6 +45,7 @@ const ActionSchema = z.object({
   mode: z.enum(["parallel", "snake"]).optional(),
   capType: z.enum(["hard", "soft"]).optional(),
   rerollsEnabled: z.boolean().optional(),
+  tiannaMode: z.boolean().optional(),
   playerSeasonId: z.string().optional(),
   fromPosition: z.enum(POSITIONS).optional(),
   position: z.enum(POSITIONS).optional(),
@@ -65,9 +67,9 @@ export async function createLobby(input: unknown) {
     const token = secretToken();
 
     await client.query(
-      `INSERT INTO lobbies(id, code, mode, cap_type, cap_amount, status, rerolls_enabled, host_player_id)
-       VALUES ($1, $2, $3, $4, $5, 'lobby', $6, $7)`,
-      [lobbyId, code, parsed.mode, parsed.capType, capAmountFor(parsed.capType), parsed.rerollsEnabled, playerId],
+      `INSERT INTO lobbies(id, code, mode, cap_type, cap_amount, status, rerolls_enabled, tianna_mode, host_player_id)
+       VALUES ($1, $2, $3, $4, $5, 'lobby', $6, $7, $8)`,
+      [lobbyId, code, parsed.mode, parsed.capType, capAmountFor(parsed.capType), parsed.rerollsEnabled, parsed.tiannaMode, playerId],
     );
     await client.query(
       `INSERT INTO lobby_players(id, lobby_id, name, token) VALUES ($1, $2, $3, $4)`,
@@ -77,7 +79,7 @@ export async function createLobby(input: unknown) {
       `INSERT INTO standings(lobby_id, player_id) VALUES ($1, $2)`,
       [lobbyId, playerId],
     );
-    await recordEvent(client, lobbyId, null, playerId, "lobby.created", { mode: parsed.mode, capType: parsed.capType });
+    await recordEvent(client, lobbyId, null, playerId, "lobby.created", { mode: parsed.mode, capType: parsed.capType, tiannaMode: parsed.tiannaMode });
     await bumpLobbyVersion(client, lobbyId);
 
     return { code, token, playerId };
@@ -164,6 +166,7 @@ async function buildLobbyState(client: DbClient, lobby: LobbyRow, token?: string
     capType: lobby.cap_type,
     capAmount: lobby.cap_amount,
     rerollsEnabled: lobby.rerolls_enabled,
+    tiannaMode: lobby.tianna_mode,
     stateVersion: lobby.state_version,
     lastActivityAt: lobby.last_activity_at.toISOString(),
     expiresAt: lobby.expires_at.toISOString(),
@@ -254,11 +257,12 @@ async function updateSettings(client: PoolClient, lobby: LobbyRow, actor: LobbyP
   const capType = parsed.capType ?? lobby.cap_type;
   const capAmount = capAmountFor(capType);
   const rerolls = parsed.rerollsEnabled ?? lobby.rerolls_enabled;
+  const tiannaMode = parsed.tiannaMode ?? lobby.tianna_mode;
   await client.query(
-    `UPDATE lobbies SET mode = $2, cap_type = $3, cap_amount = $4, rerolls_enabled = $5, updated_at = now() WHERE id = $1`,
-    [lobby.id, mode, capType, capAmount, rerolls],
+    `UPDATE lobbies SET mode = $2, cap_type = $3, cap_amount = $4, rerolls_enabled = $5, tianna_mode = $6, updated_at = now() WHERE id = $1`,
+    [lobby.id, mode, capType, capAmount, rerolls, tiannaMode],
   );
-  await recordEvent(client, lobby.id, null, actor.id, "settings.updated", { mode, capType, capAmount, rerollsEnabled: rerolls });
+  await recordEvent(client, lobby.id, null, actor.id, "settings.updated", { mode, capType, capAmount, rerollsEnabled: rerolls, tiannaMode });
 }
 
 async function startMatch(client: PoolClient, lobby: LobbyRow, actor: LobbyPlayerRow) {

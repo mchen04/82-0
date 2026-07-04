@@ -770,6 +770,16 @@ a {
   box-shadow: 0 -5px 0 var(--ink);
 }
 
+.mobile-lineup.lineup-inline {
+  position: static;
+  inset: auto;
+  display: block;
+  border: 2px solid var(--ink);
+  background: white;
+  padding: 0.75rem;
+  box-shadow: var(--shadow);
+}
+
 .mobile-slots {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -828,6 +838,146 @@ a {
   width: 100%;
   height: 100%;
   place-items: center;
+}
+
+.tianna-panel {
+  background: #f8fafc;
+}
+
+.tianna-header,
+.tianna-callout-head {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.tianna-header svg,
+.tianna-callout-head svg {
+  flex: 0 0 auto;
+  color: var(--blue);
+}
+
+.tianna-score {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border: 2px solid var(--ink);
+  background: white;
+  padding: 0.85rem;
+  box-shadow: 4px 4px 0 var(--blue);
+}
+
+.tianna-score strong {
+  display: block;
+  margin-top: 0.15rem;
+  font-family: "Saira Condensed", ui-sans-serif, system-ui;
+  font-size: 3rem;
+  font-weight: 900;
+  line-height: 0.95;
+}
+
+.tianna-score span,
+.tianna-budget span,
+.tianna-callout span {
+  display: block;
+  color: #525252;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.tianna-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.tianna-metric {
+  min-width: 0;
+  border: 2px solid #e5e5e5;
+  background: white;
+  padding: 0.55rem 0.45rem;
+  text-align: center;
+}
+
+.tianna-metric strong {
+  display: block;
+  overflow-wrap: anywhere;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.78rem;
+  font-weight: 900;
+  line-height: 1.1;
+}
+
+.tianna-metric span,
+.tianna-list span {
+  color: var(--muted);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.62rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.tianna-lists {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.tianna-list,
+.tianna-budget,
+.tianna-callout {
+  border: 2px solid #e5e5e5;
+  background: white;
+  padding: 0.75rem;
+}
+
+.tianna-list {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 0.4rem;
+}
+
+.tianna-list .eyebrow {
+  width: 100%;
+}
+
+.tianna-list span {
+  border: 2px solid #e5e5e5;
+  background: var(--chalk);
+  padding: 0.25rem 0.4rem;
+  color: #404040;
+}
+
+.tianna-budget strong,
+.tianna-callout strong {
+  display: block;
+  margin-top: 0.2rem;
+  overflow-wrap: anywhere;
+  font-family: "Saira Condensed", ui-sans-serif, system-ui;
+  font-size: 1.75rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.tianna-callout {
+  display: grid;
+  gap: 0.35rem;
+  border-color: var(--ink);
+}
+
+.tianna-callout.good {
+  border-color: var(--green);
+  box-shadow: 4px 4px 0 var(--green);
+}
+
+.tianna-callout.warn {
+  border-color: var(--orange);
+  box-shadow: 4px 4px 0 var(--orange);
 }
 
 .result-card {
@@ -944,6 +1094,12 @@ a {
   gap: 0.5rem;
 }
 
+.settings-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.5rem;
+}
+
 .empty-state {
   display: grid;
   min-height: 320px;
@@ -997,6 +1153,10 @@ a {
   }
 
   .mode-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .settings-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -1062,6 +1222,10 @@ a {
 
   .mobile-lineup {
     display: none;
+  }
+
+  .mobile-lineup.lineup-inline {
+    display: block;
   }
 
   .court-slot {

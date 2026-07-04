@@ -124,6 +124,7 @@ async function createSchema(client: PoolClient) {
       cap_amount integer NOT NULL,
       status text NOT NULL CHECK (status IN ('lobby', 'active', 'results', 'closed')),
       rerolls_enabled boolean NOT NULL DEFAULT true,
+      tianna_mode boolean NOT NULL DEFAULT false,
       host_player_id uuid,
       active_match_id uuid,
       state_version integer NOT NULL DEFAULT 0,
@@ -141,6 +142,7 @@ async function createSchema(client: PoolClient) {
     ALTER TABLE lobbies ADD COLUMN IF NOT EXISTS expires_at timestamptz;
     ALTER TABLE lobbies ADD COLUMN IF NOT EXISTS closed_at timestamptz;
     ALTER TABLE lobbies ADD COLUMN IF NOT EXISTS close_reason text;
+    ALTER TABLE lobbies ADD COLUMN IF NOT EXISTS tianna_mode boolean NOT NULL DEFAULT false;
     ALTER TABLE lobbies DROP CONSTRAINT IF EXISTS lobbies_close_reason_check;
     ALTER TABLE lobbies ADD CONSTRAINT lobbies_close_reason_check CHECK (close_reason IS NULL OR close_reason IN ('expired', 'manual'));
     UPDATE lobbies

@@ -175,6 +175,8 @@ async function main() {
       if (!highlighted[0].textContent.includes(${JSON.stringify(nextCurrentName)})) throw new Error('current turn highlight did not move to the next player');
     `);
 
+    await verifyTiannaMode(port);
+
     console.log("Lineup UI verification passed.");
   } finally {
     await browser("close").catch(() => undefined);
@@ -234,6 +236,77 @@ async function seedSnakeLobby() {
   const currentPlayerName = playerNameForState(state, currentPlayerId);
   const progressNames = (state.activeMatch?.runs ?? []).map((run) => playerNameForState(state, run.playerId));
   return { code: host.code, token: host.token, tokens, currentPlayerName, progressNames };
+}
+
+async function verifyTiannaMode(port: number) {
+  const host = await createLobby({ name: "Tianna A", mode: "parallel", capType: "hard", rerollsEnabled: true });
+  await joinLobby(host.code, { name: "Tianna B" });
+  await browser("open", `http://127.0.0.1:${port}/lobby/${host.code}`);
+  await browser("set", "viewport", "1280", "900");
+  await evalPage(`localStorage.setItem(${JSON.stringify(`better82:${host.code}:token`)}, ${JSON.stringify(host.token)}); location.reload();`);
+  await waitForPage(`
+    const rerolls = document.querySelector('[data-testid="draft-rerolls-toggle"]');
+    const tianna = document.querySelector('[data-testid="tianna-mode-toggle"]');
+    if (!rerolls) throw new Error('draft rerolls toggle missing');
+    if (!tianna) throw new Error('tianna mode toggle missing');
+    if (!tianna.textContent.includes('off')) throw new Error('tianna mode should default off');
+    const parent = tianna.parentElement;
+    if (!parent || !parent.contains(rerolls)) throw new Error('tianna mode toggle is not grouped with draft rerolls');
+  `);
+  await browser("click", '[data-testid="tianna-mode-toggle"]');
+  await waitForPage(`
+    const tianna = document.querySelector('[data-testid="tianna-mode-toggle"]');
+    if (!tianna?.textContent.includes('on')) throw new Error('tianna mode did not toggle on');
+  `);
+
+  let state = await getLobbyState(host.code, host.token);
+  assert.equal(state.tiannaMode, true);
+  state = await applyLobbyAction(host.code, { token: host.token, expectedVersion: state.stateVersion, action: "start" });
+  const run = state.activeMatch?.runs.find((candidate) => candidate.playerId === state.viewerPlayerId);
+  assert.ok(run, "tianna viewer run exists");
+  const spinPlayer = loadGamePack().players.find((player) => player.positions.includes("PG"));
+  assert.ok(spinPlayer, "tianna spin player exists");
+  await query(`UPDATE runs SET current_spin = $2::jsonb, updated_at = now() WHERE id = $1`, [run.id, JSON.stringify({ team: spinPlayer.team, era: spinPlayer.era })]);
+  await bumpLobbyVersion(host.code);
+
+  await waitForPage(`
+    const inlineLineups = [...document.querySelectorAll('[data-testid="mobile-lineup-strip"]')];
+    if (inlineLineups.length !== 1) throw new Error('tianna mode should render exactly one inline lineup strip');
+    const inline = document.querySelector('.draft-controls [data-testid="mobile-lineup-strip"]');
+    if (!inline) throw new Error('inline lineup strip should sit above lobby progress');
+    if (getComputedStyle(inline).position === 'fixed') throw new Error('tianna lineup strip should not be fixed');
+    if (document.querySelector('[data-testid^="court-slot-"]')) throw new Error('court slots should be removed in tianna mode');
+    const panel = document.querySelector('[data-testid="tianna-analysis"]');
+    if (!panel) throw new Error('tianna analysis panel missing');
+    const side = document.querySelector('.side');
+    const standings = side?.querySelector('.section-title');
+    if (!side || !standings || !side.contains(panel)) throw new Error('tianna panel should be in the right side column');
+    const text = panel.textContent ?? '';
+    for (const label of ['Tianna Mode', 'Current OVR', 'Balance', 'Have', 'Need', 'Best Board Pick']) {
+      if (!text.includes(label)) throw new Error('tianna panel missing ' + label);
+    }
+    if (text.includes('Spin to load a board.')) throw new Error('tianna board recommendation did not load');
+  `);
+
+  const snakeHost = await createLobby({ name: "Tianna Snake A", mode: "snake", capType: "hard", rerollsEnabled: true, tiannaMode: true });
+  const snakeGuest = await joinLobby(snakeHost.code, { name: "Tianna Snake B" });
+  state = await getLobbyState(snakeHost.code, snakeHost.token);
+  state = await applyLobbyAction(snakeHost.code, { token: snakeHost.token, expectedVersion: state.stateVersion, action: "start" });
+  const currentPlayerId = state.activeMatch?.currentTurnPlayerId;
+  assert.ok(currentPlayerId, "tianna snake current drafter exists");
+  const nonCurrentToken = currentPlayerId === snakeHost.playerId ? snakeGuest.token : snakeHost.token;
+  await browser("open", `http://127.0.0.1:${port}/lobby/${snakeHost.code}`);
+  await evalPage(`localStorage.setItem(${JSON.stringify(`better82:${snakeHost.code}:token`)}, ${JSON.stringify(nonCurrentToken)}); location.reload();`);
+  await waitForPage(`
+    const panel = document.querySelector('[data-testid="tianna-analysis"]');
+    if (!panel) throw new Error('tianna snake analysis panel missing for non-current viewer');
+    const text = panel.textContent ?? '';
+    if (!text.includes('Best Board Pick')) throw new Error('tianna snake best board section missing');
+    if (text.includes('Spin to load a board.')) throw new Error('tianna snake board recommendation missing for non-current viewer');
+    const cards = [...document.querySelectorAll('[data-testid="player-card"]')];
+    if (!cards.length) throw new Error('tianna snake candidate board missing for non-current viewer');
+    if (!cards.every((card) => card.disabled)) throw new Error('non-current snake viewer candidate cards should stay disabled');
+  `);
 }
 
 async function finishViewerRun(seed: { code: string; runId: string }) {
