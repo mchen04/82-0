@@ -10,7 +10,7 @@
   --green: #16a34a;
   --red: #dc2626;
   --muted: #737373;
-  --shadow: 6px 6px 0 rgba(17, 24, 39, 0.9);
+  --shadow: 5px 5px 0 rgba(17, 24, 39, 0.9);
 }
 
 * {
@@ -25,11 +25,19 @@ html {
     linear-gradient(0deg, rgba(23, 23, 23, 0.04) 1px, transparent 1px) 0 0 / 18px 18px,
     var(--paper);
   font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  font-size: 15px;
+}
+
+@media (min-width: 1024px) {
+  html {
+    font-size: 14px;
+  }
 }
 
 body {
   min-height: 100%;
   margin: 0;
+  overflow-x: clip;
 }
 
 button,
@@ -70,7 +78,7 @@ a {
 
 .shell {
   min-height: 100vh;
-  padding-bottom: 7rem;
+  padding-bottom: 6.5rem;
   color: var(--ink);
 }
 
@@ -88,7 +96,7 @@ a {
   align-items: center;
   justify-content: space-between;
   max-width: 80rem;
-  padding: 0.75rem 1rem;
+  padding: 0.5rem 1rem;
   margin: 0 auto;
   gap: 0.75rem;
 }
@@ -96,13 +104,13 @@ a {
 .brand {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.6rem;
   min-width: 0;
 }
 
 .brand-logo {
-  width: 2.75rem;
-  height: 2.75rem;
+  width: 2.25rem;
+  height: 2.25rem;
   object-fit: contain;
   filter: drop-shadow(3px 3px 0 rgba(23, 23, 23, 0.28));
 }
@@ -110,7 +118,7 @@ a {
 .brand-title {
   margin: 0;
   font-family: "Saira Condensed", ui-sans-serif, system-ui;
-  font-size: 1.55rem;
+  font-size: 1.3rem;
   font-weight: 900;
   line-height: 1;
 }
@@ -120,7 +128,7 @@ a {
   margin: 0;
   color: var(--muted);
   font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 0.72rem;
+  font-size: 0.66rem;
   font-weight: 800;
   letter-spacing: 0;
   text-transform: uppercase;
@@ -135,22 +143,22 @@ a {
 .page-grid {
   display: grid;
   max-width: 80rem;
-  padding: 1.25rem 1rem;
+  padding: 0.9rem 1rem;
   margin: 0 auto;
-  gap: 1.25rem;
+  gap: 0.75rem;
 }
 
 .game-grid {
   display: grid;
   max-width: 80rem;
-  padding: 1.25rem 1rem;
+  padding: 0.9rem 1rem;
   margin: 0 auto;
-  gap: 1.25rem;
+  gap: 0.75rem;
 }
 
 .stack {
   display: grid;
-  gap: 1rem;
+  gap: 0.65rem;
 }
 
 .panel {
@@ -160,7 +168,7 @@ a {
 }
 
 .panel-pad {
-  padding: 0.85rem;
+  padding: 0.65rem;
 }
 
 .chalk {
@@ -168,7 +176,7 @@ a {
 }
 
 .black-head {
-  padding: 0.85rem 1rem;
+  padding: 0.55rem 0.75rem;
   color: var(--chalk);
   background: var(--ink);
   border-bottom: 2px solid var(--ink);
@@ -177,28 +185,28 @@ a {
 .black-head-title {
   margin: 0;
   font-family: "Saira Condensed", ui-sans-serif, system-ui;
-  font-size: 1.9rem;
+  font-size: 1.45rem;
   font-weight: 900;
   line-height: 1;
 }
 
 .black-head-subtitle {
-  margin: 0.15rem 0 0;
+  margin: 0.12rem 0 0;
   color: #d4d4d4;
   font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 0.72rem;
+  font-size: 0.66rem;
   font-weight: 800;
   text-transform: uppercase;
 }
 
 .mode-grid {
   display: grid;
-  gap: 0.75rem;
+  gap: 0.6rem;
 }
 
 .setup-row {
   display: grid;
-  gap: 0.75rem;
+  gap: 0.6rem;
 }
 
 .mode-card,
@@ -211,8 +219,7 @@ a {
 
 .mode-card {
   display: grid;
-  min-height: 7.25rem;
-  padding: 0.85rem;
+  padding: 0.65rem;
   text-align: left;
   transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s, background 0.15s;
 }
@@ -233,35 +240,35 @@ a {
 }
 
 .mode-title {
-  font-size: 1.65rem;
+  font-size: 1.2rem;
 }
 
 .section-title {
-  font-size: 2rem;
+  font-size: 1.35rem;
 }
 
 .mode-copy,
 .small-copy {
-  margin: 0.4rem 0 0;
+  margin: 0.3rem 0 0;
   color: #525252;
-  font-size: 0.88rem;
+  font-size: 0.8rem;
   font-weight: 700;
 }
 
 .form-grid {
   display: grid;
-  gap: 0.75rem;
+  gap: 0.6rem;
 }
 
 .field {
   display: grid;
-  gap: 0.35rem;
+  gap: 0.3rem;
 }
 
 .field span {
   color: var(--muted);
   font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 0.7rem;
+  font-size: 0.64rem;
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -269,10 +276,10 @@ a {
 .input,
 .select {
   width: 100%;
-  height: 2.75rem;
+  height: 2.35rem;
   border: 2px solid #d4d4d4;
   background: white;
-  padding: 0 0.75rem;
+  padding: 0 0.65rem;
   color: var(--ink);
   outline: none;
 }
@@ -286,14 +293,14 @@ a {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 2.75rem;
+  min-height: 2.35rem;
   border: 2px solid var(--ink);
   background: white;
-  padding: 0 0.85rem;
-  gap: 0.45rem;
+  padding: 0 0.7rem;
+  gap: 0.4rem;
   color: var(--ink);
   font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   font-weight: 900;
   text-transform: uppercase;
   box-shadow: 3px 3px 0 var(--ink);
@@ -326,7 +333,7 @@ a {
 }
 
 .btn.icon {
-  width: 2.75rem;
+  width: 2.35rem;
   padding: 0;
 }
 
@@ -341,7 +348,7 @@ a {
   display: none;
   border: 2px solid var(--ink);
   background: white;
-  padding: 0.4rem 0.7rem;
+  padding: 0.3rem 0.6rem;
   text-align: right;
   box-shadow: 3px 3px 0 var(--ink);
 }
@@ -349,7 +356,7 @@ a {
 .budget-number {
   margin: 0;
   font-family: "Saira Condensed", ui-sans-serif, system-ui;
-  font-size: 1.65rem;
+  font-size: 1.35rem;
   font-weight: 900;
   line-height: 1;
 }
@@ -366,21 +373,21 @@ a {
   overflow: hidden;
   border: 2px solid var(--orange);
   background: white;
-  padding: 0.85rem;
+  padding: 0.55rem;
   text-align: center;
-  box-shadow: 4px 4px 0 var(--orange);
+  box-shadow: 3px 3px 0 var(--orange);
 }
 
 .spin-card.blue {
   border-color: var(--blue);
-  box-shadow: 4px 4px 0 var(--blue);
+  box-shadow: 3px 3px 0 var(--blue);
 }
 
 .spin-card-label {
   margin: 0;
   color: var(--orange);
   font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 0.7rem;
+  font-size: 0.64rem;
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -396,7 +403,7 @@ a {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: "Saira Condensed", ui-sans-serif, system-ui;
-  font-size: 2.2rem;
+  font-size: 1.6rem;
   font-weight: 900;
   line-height: 1;
 }
@@ -404,47 +411,47 @@ a {
 .filters {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 0.65rem;
-  margin-top: 1rem;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
   color: #525252;
   font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   font-weight: 800;
   text-transform: uppercase;
 }
 
 .position-filter-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(2.75rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(2.35rem, 1fr));
   width: 100%;
-  gap: 0.5rem;
+  gap: 0.4rem;
   overflow-x: hidden;
   padding-bottom: 0.15rem;
 }
 
 .position-filter-row .btn {
-  min-width: 2.75rem;
-  padding-inline: 0.65rem;
+  min-width: 2.35rem;
+  padding-inline: 0.5rem;
 }
 
 .sort-filter {
   display: grid;
-  min-width: 10.75rem;
-  gap: 0.35rem;
+  min-width: 9rem;
+  gap: 0.3rem;
 }
 
 .sort-filter span {
   color: var(--muted);
   font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 0.7rem;
+  font-size: 0.64rem;
   font-weight: 900;
   text-align: center;
   text-transform: uppercase;
 }
 
 .sort-filter .select {
-  min-width: 10.75rem;
-  padding-inline: 0.85rem;
+  min-width: 9rem;
+  padding-inline: 0.6rem;
   text-align: center;
   text-align-last: center;
 }
@@ -453,7 +460,7 @@ a {
   display: grid;
   grid-template-columns: 1fr 1fr auto;
   gap: 0.5rem;
-  margin-top: 0.75rem;
+  margin-top: 0.55rem;
 }
 
 .candidate-list {
@@ -461,8 +468,8 @@ a {
   max-height: 560px;
   overflow-x: hidden;
   overflow-y: auto;
-  padding: 0.85rem;
-  gap: 0.75rem;
+  padding: 0.6rem;
+  gap: 0.5rem;
 }
 
 .candidate-button {
@@ -471,8 +478,8 @@ a {
   width: 100%;
   border: 2px solid #e5e5e5;
   background: white;
-  padding: 0.85rem;
-  gap: 0.75rem;
+  padding: 0.55rem 0.65rem;
+  gap: 0.5rem;
   text-align: left;
 }
 
@@ -501,7 +508,7 @@ a {
   white-space: nowrap;
   margin: 0;
   font-family: "Saira Condensed", ui-sans-serif, system-ui;
-  font-size: 1.45rem;
+  font-size: 1.1rem;
   font-weight: 900;
   line-height: 1;
 }
@@ -509,10 +516,10 @@ a {
 .salary {
   border: 2px solid #15803d;
   background: var(--green);
-  padding: 0.15rem 0.45rem;
+  padding: 0.12rem 0.4rem;
   color: white;
   font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 0.72rem;
+  font-size: 0.66rem;
   font-weight: 900;
 }
 
@@ -525,7 +532,7 @@ a {
 .stats-row {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 0.4rem;
+  gap: 0.35rem;
 }
 
 .stat {
@@ -535,7 +542,7 @@ a {
 .stat strong {
   display: block;
   font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 0.8rem;
+  font-size: 0.72rem;
   font-weight: 900;
   line-height: 1;
 }
@@ -543,7 +550,7 @@ a {
 .stat span {
   color: var(--muted);
   font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 0.62rem;
+  font-size: 0.56rem;
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -552,7 +559,7 @@ a {
   position: relative;
   width: 100%;
   max-width: 100%;
-  min-height: 380px;
+  min-height: 300px;
   overflow: visible;
   aspect-ratio: 1.05 / 1;
   border: 2px solid var(--ink);
@@ -562,7 +569,7 @@ a {
 
 @media (max-width: 420px) {
   .court {
-    min-height: min(380px, calc((100vw - 2rem) / 1.05));
+    min-height: min(300px, calc((100vw - 2rem) / 1.05));
   }
 }
 
@@ -577,8 +584,8 @@ a {
   position: absolute;
   z-index: 1;
   display: grid;
-  width: 86px;
-  height: 86px;
+  width: 76px;
+  height: 76px;
   place-items: center;
   border: 0;
   border-radius: 999px;
@@ -624,7 +631,7 @@ a {
 }
 
 .court-core {
-  inset: 15px;
+  inset: 13px;
   border: 2px solid rgba(251, 146, 60, 0.5);
   background: rgba(10, 10, 10, 0.14);
 }
@@ -671,14 +678,15 @@ a {
   position: relative;
   z-index: 2;
   display: grid;
-  width: 58px;
-  height: 58px;
+  width: 50px;
+  height: 50px;
   place-items: center;
   border: 2px solid var(--chalk);
   border-radius: 999px;
   background: var(--ink);
   color: white;
   font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.85rem;
   font-weight: 900;
   line-height: 1;
   box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.45);
@@ -691,6 +699,7 @@ a {
 .lineup-tooltip {
   --tooltip-shift-x: -50%;
   --tooltip-nudge-x: 0px;
+  display: none;
   position: absolute;
   bottom: calc(100% + 0.45rem);
   left: 50%;
@@ -746,6 +755,7 @@ a {
 .mobile-slot:focus .lineup-tooltip,
 .mobile-slot:hover .lineup-tooltip,
 .mobile-slot:focus-visible .lineup-tooltip {
+  display: block;
   opacity: 1;
   transform: translate(calc(var(--tooltip-shift-x) + var(--tooltip-nudge-x)), 0);
 }
@@ -754,7 +764,7 @@ a {
   position: relative;
   z-index: 2;
   font-family: "Saira Condensed", ui-sans-serif, system-ui;
-  font-size: 2rem;
+  font-size: 1.6rem;
   font-weight: 900;
   line-height: 1;
 }
@@ -766,7 +776,7 @@ a {
   z-index: 40;
   border-top: 2px solid var(--ink);
   background: var(--chalk);
-  padding: 0.75rem 0.75rem calc(0.75rem + env(safe-area-inset-bottom));
+  padding: 0.5rem 0.5rem calc(0.5rem + env(safe-area-inset-bottom));
   box-shadow: 0 -5px 0 var(--ink);
 }
 
@@ -776,20 +786,20 @@ a {
   display: block;
   border: 2px solid var(--ink);
   background: white;
-  padding: 0.75rem;
+  padding: 0.5rem;
   box-shadow: var(--shadow);
 }
 
 .mobile-slots {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 0.5rem;
+  gap: 0.4rem;
 }
 
 .mobile-slot {
   display: grid;
   min-width: 0;
-  height: 66px;
+  height: 52px;
   place-items: center;
   border: 2px dashed #d4d4d4;
   background: white;
@@ -828,7 +838,7 @@ a {
 
 .mobile-slot strong {
   font-family: "Saira Condensed", ui-sans-serif, system-ui;
-  font-size: 1.55rem;
+  font-size: 1.2rem;
   font-weight: 900;
   line-height: 1;
 }
@@ -848,7 +858,7 @@ a {
 .tianna-callout-head {
   display: flex;
   align-items: center;
-  gap: 0.55rem;
+  gap: 0.5rem;
 }
 
 .tianna-header svg,
@@ -858,32 +868,31 @@ a {
 }
 
 .tianna-score {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
   border: 2px solid var(--ink);
   background: white;
-  padding: 0.85rem;
-  box-shadow: 4px 4px 0 var(--blue);
+  padding: 0.6rem;
+  box-shadow: 3px 3px 0 var(--blue);
 }
 
 .tianna-score strong {
   display: block;
-  margin-top: 0.15rem;
+  margin-top: 0.12rem;
+  overflow-wrap: anywhere;
   font-family: "Saira Condensed", ui-sans-serif, system-ui;
-  font-size: 3rem;
+  font-size: 1.7rem;
   font-weight: 900;
   line-height: 0.95;
 }
 
 .tianna-score span,
-.tianna-budget span,
 .tianna-callout span {
   display: block;
   color: #525252;
   font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 0.72rem;
+  font-size: 0.62rem;
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -891,14 +900,14 @@ a {
 .tianna-metrics {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.5rem;
+  gap: 0.4rem;
 }
 
 .tianna-metric {
   min-width: 0;
   border: 2px solid #e5e5e5;
   background: white;
-  padding: 0.55rem 0.45rem;
+  padding: 0.4rem 0.3rem;
   text-align: center;
 }
 
@@ -906,7 +915,7 @@ a {
   display: block;
   overflow-wrap: anywhere;
   font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   font-weight: 900;
   line-height: 1.1;
 }
@@ -915,7 +924,7 @@ a {
 .tianna-list span {
   color: var(--muted);
   font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 0.62rem;
+  font-size: 0.56rem;
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -923,15 +932,14 @@ a {
 .tianna-lists {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.5rem;
+  gap: 0.4rem;
 }
 
 .tianna-list,
-.tianna-budget,
 .tianna-callout {
   border: 2px solid #e5e5e5;
   background: white;
-  padding: 0.75rem;
+  padding: 0.5rem;
 }
 
 .tianna-list {
@@ -939,7 +947,7 @@ a {
   min-width: 0;
   flex-wrap: wrap;
   align-content: flex-start;
-  gap: 0.4rem;
+  gap: 0.3rem;
 }
 
 .tianna-list .eyebrow {
@@ -949,62 +957,61 @@ a {
 .tianna-list span {
   border: 2px solid #e5e5e5;
   background: var(--chalk);
-  padding: 0.25rem 0.4rem;
+  padding: 0.18rem 0.35rem;
   color: #404040;
 }
 
-.tianna-budget strong,
 .tianna-callout strong {
   display: block;
-  margin-top: 0.2rem;
+  margin-top: 0.15rem;
   overflow-wrap: anywhere;
   font-family: "Saira Condensed", ui-sans-serif, system-ui;
-  font-size: 1.75rem;
+  font-size: 1.2rem;
   font-weight: 900;
   line-height: 1;
 }
 
 .tianna-callout {
   display: grid;
-  gap: 0.35rem;
+  gap: 0.3rem;
   border-color: var(--ink);
 }
 
 .tianna-callout.good {
   border-color: var(--green);
-  box-shadow: 4px 4px 0 var(--green);
+  box-shadow: 3px 3px 0 var(--green);
 }
 
 .tianna-callout.warn {
   border-color: var(--orange);
-  box-shadow: 4px 4px 0 var(--orange);
+  box-shadow: 3px 3px 0 var(--orange);
 }
 
 .result-card {
-  padding: 1rem;
+  padding: 0.85rem;
   text-align: center;
 }
 
 .record {
   margin: 0;
   font-family: "Saira Condensed", ui-sans-serif, system-ui;
-  font-size: 4.25rem;
+  font-size: 3rem;
   font-weight: 900;
   line-height: 0.95;
 }
 
 .grade {
-  margin: 0.35rem 0 0;
+  margin: 0.3rem 0 0;
   color: var(--blue);
   font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   font-weight: 900;
   text-transform: uppercase;
 }
 
 .opponent-card,
 .standing-row {
-  padding: 0.75rem;
+  padding: 0.55rem;
 }
 
 .opponent-card {
@@ -1022,12 +1029,12 @@ a {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
+  gap: 0.6rem;
 }
 
 .progress-bar {
-  height: 0.55rem;
-  margin-top: 0.7rem;
+  height: 0.45rem;
+  margin-top: 0.5rem;
   border: 2px solid var(--ink);
   background: #f5f5f5;
 }
@@ -1040,19 +1047,19 @@ a {
 .lineup-mini {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 0.35rem;
-  margin-top: 0.65rem;
+  gap: 0.3rem;
+  margin-top: 0.45rem;
 }
 
 .mini-slot {
-  min-height: 2.4rem;
+  min-height: 2rem;
   border: 2px dashed #d4d4d4;
   background: white;
-  padding: 0.25rem;
+  padding: 0.22rem;
   color: #737373;
   text-align: center;
   font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 0.65rem;
+  font-size: 0.6rem;
   font-weight: 900;
 }
 
@@ -1066,17 +1073,18 @@ a {
 .notice {
   border: 2px solid var(--ink);
   background: var(--chalk);
-  padding: 0.85rem;
+  padding: 0.6rem;
+  font-size: 0.85rem;
   font-weight: 700;
 }
 
 .error {
   border: 2px solid #b91c1c;
   background: #fef2f2;
-  padding: 0.85rem;
+  padding: 0.6rem;
   color: #7f1d1d;
   font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   font-weight: 800;
 }
 
@@ -1102,45 +1110,46 @@ a {
 
 .empty-state {
   display: grid;
-  min-height: 320px;
+  min-height: 220px;
   place-items: center;
-  padding: 2rem;
+  padding: 1.25rem;
   text-align: center;
 }
 
 .empty-state h2 {
   margin: 0;
   font-family: "Saira Condensed", ui-sans-serif, system-ui;
-  font-size: 2.4rem;
+  font-size: 1.7rem;
   font-weight: 900;
   line-height: 1;
 }
 
 .empty-state p {
   max-width: 24rem;
-  margin: 0.5rem auto 0;
+  margin: 0.45rem auto 0;
   color: #525252;
+  font-size: 0.85rem;
   font-weight: 700;
 }
 
 .empty-state.compact {
-  min-height: 220px;
+  min-height: 150px;
 }
 
 @media (min-width: 640px) {
   .topbar-inner,
   .page-grid,
   .game-grid {
-    padding-inline: 1.5rem;
+    padding-inline: 1.25rem;
   }
 
   .brand-logo {
-    width: 3.5rem;
-    height: 3.5rem;
+    width: 2.6rem;
+    height: 2.6rem;
   }
 
   .brand-title {
-    font-size: 2rem;
+    font-size: 1.55rem;
   }
 
   .budget-card {
@@ -1162,10 +1171,11 @@ a {
 
   .candidate-button {
     grid-template-columns: 1fr auto;
+    align-items: center;
   }
 
   .filters {
-    grid-template-columns: minmax(0, 1fr) minmax(10.75rem, max-content);
+    grid-template-columns: minmax(0, 1fr) max-content max-content;
     align-items: end;
   }
 
@@ -1181,17 +1191,30 @@ a {
     padding-bottom: 0;
   }
 
+  .page-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .page-grid > * {
+    grid-column: 1 / -1;
+  }
+
+  .page-grid > .home-create,
+  .page-grid > .home-join {
+    grid-column: auto;
+  }
+
   .game-grid {
-    grid-template-columns: minmax(0, 0.95fr) minmax(420px, 1fr);
+    grid-template-columns: minmax(0, 0.95fr) minmax(380px, 1fr);
     align-items: start;
-    padding-top: 2rem;
-    padding-bottom: 2rem;
+    padding-top: 0.9rem;
+    padding-bottom: 0.9rem;
   }
 
   .game-grid-draft {
     max-width: 98rem;
     grid-template-columns: minmax(220px, 0.72fr) minmax(360px, 1.08fr) minmax(300px, 0.9fr);
-    gap: 1rem;
+    gap: 0.75rem;
   }
 
   .draft-controls,
@@ -1204,20 +1227,31 @@ a {
     overflow-x: hidden;
   }
 
-  .game-grid-draft .candidate-list {
-    max-height: calc(100vh - 18rem);
-    min-height: 360px;
+  .game-grid-draft .board-panel {
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - 6rem);
+  }
+
+  .game-grid-draft .board-panel .black-head,
+  .game-grid-draft .board-panel .filters,
+  .game-grid-draft .board-panel .notice {
+    flex: 0 0 auto;
+  }
+
+  .game-grid-draft .board-panel .candidate-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
   }
 
   .game-grid-draft .court {
-    min-height: 320px;
+    min-height: 260px;
   }
 
   .side {
-    position: sticky;
-    top: 6rem;
     display: grid;
-    gap: 1rem;
+    gap: 0.75rem;
   }
 
   .mobile-lineup {
@@ -1229,12 +1263,12 @@ a {
   }
 
   .court-slot {
-    width: 104px;
-    height: 104px;
+    width: 88px;
+    height: 88px;
   }
 
   .court-core {
-    inset: 18px;
+    inset: 15px;
   }
 }
 
@@ -1242,6 +1276,6 @@ a {
   .game-grid-draft {
     max-width: 104rem;
     grid-template-columns: minmax(250px, 0.78fr) minmax(430px, 1.18fr) minmax(340px, 0.92fr);
-    gap: 1.25rem;
+    gap: 0.85rem;
   }
 }
