@@ -7,8 +7,8 @@ import { promisify } from "node:util";
 import { createLobby, joinLobby, getLobbyState, applyLobbyAction } from "../lib/multiplayer";
 import { getPool, query } from "../lib/db";
 import { loadGamePack } from "../lib/game-data";
-import { HARD_CAP_AMOUNT, salary, scoreLineup, toLineupSlot } from "../lib/rules";
-import { POSITIONS, type Lineup, type PublicLobbyState } from "../lib/types";
+import { HARD_CAP_AMOUNT, initials, salary, scoreLineup, toLineupSlot } from "../lib/rules";
+import { POSITIONS, type Lineup, type PlayerSeason, type PublicLobbyState } from "../lib/types";
 
 loadEnvConfig(process.cwd());
 
@@ -177,6 +177,7 @@ async function main() {
 
     await verifyTiannaMode(port);
     await verifyDirectAmareDraft(port);
+    await verifyRoleMoveDraft(port);
 
     console.log("Lineup UI verification passed.");
   } finally {
@@ -365,6 +366,61 @@ async function verifyDirectAmareDraft(port: number) {
     }
   `);
 }
+
+async function verifyRoleMoveDraft(port: number) {
+  const { mover, incoming } = roleMovePair();
+  const host = await createLobby({ name: "Role Move A", mode: "parallel", capType: "hard", rerollsEnabled: true });
+  await joinLobby(host.code, { name: "Role Move B" });
+  let state = await getLobbyState(host.code, host.token);
+  state = await applyLobbyAction(host.code, { token: host.token, expectedVersion: state.stateVersion, action: "start" });
+  const run = state.activeMatch?.runs.find((candidate) => candidate.playerId === state.viewerPlayerId);
+  assert.ok(run, "role-move viewer run exists");
+
+  await query(`UPDATE runs SET current_spin = $2::jsonb, updated_at = now() WHERE id = $1`, [run.id, JSON.stringify({ team: mover.team, era: mover.era })]);
+  state = await getLobbyState(host.code, host.token);
+  await applyLobbyAction(host.code, { token: host.token, expectedVersion: state.stateVersion, action: "pick", playerSeasonId: mover.id, position: "C" });
+  await query(`UPDATE runs SET current_spin = $2::jsonb, updated_at = now() WHERE id = $1`, [run.id, JSON.stringify({ team: incoming.team, era: incoming.era })]);
+  await bumpLobbyVersion(host.code);
+
+  await browser("open", `http://127.0.0.1:${port}/lobby/${host.code}`);
+  await browser("set", "viewport", "1024", "800");
+  await evalPage(`localStorage.setItem(${JSON.stringify(`better82:${host.code}:token`)}, ${JSON.stringify(host.token)}); location.reload();`);
+  await waitForPage(`
+    const card = document.querySelector('[data-player-id="${incoming.id}"]');
+    if (!card) throw new Error('role-move candidate card missing');
+    if (card.disabled) throw new Error('role-move candidate should be draftable');
+    const text = card.textContent ?? '';
+    if (!text.includes('Drafts at C')) throw new Error('role-move candidate should draft at C');
+    if (!text.includes(${JSON.stringify(`moves ${initials(mover.player)} to PF`)})) throw new Error('role-move label missing moved player');
+    if (card.scrollWidth > card.clientWidth + 1) throw new Error('role-move card overflows horizontally');
+    const list = document.querySelector('.draft-board .candidate-list');
+    if (!list) throw new Error('role-move candidate list missing');
+    if (list.scrollWidth > list.clientWidth + 1) throw new Error('role-move candidate list overflows horizontally');
+    card.scrollIntoView({ block: 'center' });
+  `);
+  await browser("wait", "200");
+  await browser("click", `[data-player-id="${incoming.id}"]`);
+  await waitForPage(filledScript("C", incoming.player));
+  await waitForPage(filledScript("PF", mover.player));
+  await browser("set", "viewport", "1280", "900");
+}
+
+function roleMovePair(): { mover: PlayerSeason; incoming: PlayerSeason } {
+  const pack = loadGamePack();
+  const movers = pack.players
+    .filter((player) => player.positions.includes("C") && player.positions.includes("PF"))
+    .sort((a, b) => salary(a) - salary(b) || a.player.localeCompare(b.player));
+  for (const mover of movers) {
+    const maxIncomingCost = HARD_CAP_AMOUNT - salary(mover) - 3 * MINIMUM_REMAINING_SLOTS_AFTER_SECOND_PICK;
+    const incoming = pack.players
+      .filter((player) => player.id !== mover.id && player.positions.length === 1 && player.positions[0] === "C" && salary(player) <= maxIncomingCost)
+      .sort((a, b) => salary(a) - salary(b) || a.player.localeCompare(b.player))[0];
+    if (incoming) return { mover, incoming };
+  }
+  throw new Error("role-move test pair missing");
+}
+
+const MINIMUM_REMAINING_SLOTS_AFTER_SECOND_PICK = 3;
 
 async function finishViewerRun(seed: { code: string; runId: string }) {
   const lineup = completedLineup();

@@ -2,10 +2,12 @@
 
 import type { ReactNode } from "react";
 import { Brain, Target, TrendingUp } from "lucide-react";
-import { effectiveOverall, formatStat, maxLegalCost, scoreLineupProgress, slotCount, type LineupProgressResult } from "@/lib/rules";
+import { effectiveOverall, formatStat, initials, maxLegalCost, scoreLineupProgress, slotCount, type LineupProgressResult } from "@/lib/rules";
 import {
   POSITIONS,
   type Candidate,
+  type LineupPlacementMove,
+  type LineupPlacementOption,
   type LineupSlot,
   type PlayerSeason,
   type Position,
@@ -18,6 +20,7 @@ export type TiannaBoardOption = {
   candidateName: string;
   cost: number;
   position: Position;
+  moves: LineupPlacementMove[];
   scoreAfter: number;
   delta: number;
   reasons: string[];
@@ -96,6 +99,17 @@ function estimateLineup(slots: LineupSlot[], state: PublicLobbyState, spent: num
   return scoreLineupProgress(slots.map(playerFromSlot), state.capType, state.capAmount, spent);
 }
 
+function slotsWithPlacement(run: PublicRun, candidate: Candidate, placement: LineupPlacementOption) {
+  const movedPositions = new Map(placement.moves.map((move) => [move.playerId, move.position]));
+  return [
+    ...slotList(run).map((slot) => {
+      const position = movedPositions.get(slot.playerId);
+      return position ? { ...slot, position } : slot;
+    }),
+    slotFromCandidate(candidate, placement.position),
+  ];
+}
+
 function profileForRun(state: PublicLobbyState, run: PublicRun): TiannaProfile {
   const slots = slotList(run);
   const players = slots.map(playerFromSlot);
@@ -150,17 +164,17 @@ export function evaluateTiannaBoard(state: PublicLobbyState | null, run: PublicR
   const before = effectiveOverall(estimateLineup(beforeSlots, state, run.capSpent));
   const options = candidates.flatMap((candidate) => {
     if (!candidate.assignable) return [];
-    return candidate.openPositions
-      .filter((position) => !run.lineup[position])
-      .map((position) => {
-        const afterSlots = [...beforeSlots, slotFromCandidate(candidate, position)];
+    return candidate.placementOptions
+      .map((placement) => {
+        const afterSlots = slotsWithPlacement(run, candidate, placement);
         const after = estimateLineup(afterSlots, state, run.capSpent + candidate.cost);
         const scoreAfter = effectiveOverall(after);
         return {
           candidateId: candidate.id,
           candidateName: candidate.player,
           cost: candidate.cost,
-          position,
+          position: placement.position,
+          moves: placement.moves,
           scoreAfter,
           delta: Number((scoreAfter - before).toFixed(1)),
           reasons: after.reasons,
@@ -170,6 +184,7 @@ export function evaluateTiannaBoard(state: PublicLobbyState | null, run: PublicR
   options.sort((a, b) =>
     b.scoreAfter - a.scoreAfter ||
     b.delta - a.delta ||
+    a.moves.length - b.moves.length ||
     a.cost - b.cost ||
     a.candidateName.localeCompare(b.candidateName) ||
     a.position.localeCompare(b.position),
@@ -300,7 +315,7 @@ function TiannaCallout({
         <>
           <strong>{option.candidateName}</strong>
           <span>
-            {option.position} · ${option.cost} · {signed(option.delta)} OVR
+            {placementText(option)} · ${option.cost} · {signed(option.delta)} OVR
           </span>
           <p className="small-copy">{option.reasons.slice(0, 3).join(" · ") || "Best statistical value on the current board."}</p>
         </>
@@ -309,6 +324,13 @@ function TiannaCallout({
       )}
     </div>
   );
+}
+
+function placementText(option: Pick<TiannaBoardOption, "position" | "moves">) {
+  const firstMove = option.moves[0];
+  if (!firstMove) return option.position;
+  const extra = option.moves.length > 1 ? ` +${option.moves.length - 1}` : "";
+  return `${option.position}; ${initials(firstMove.player)} to ${firstMove.position}${extra}`;
 }
 
 function LastPickReview({ review }: { review: TiannaPickReview }) {
@@ -323,7 +345,7 @@ function LastPickReview({ review }: { review: TiannaPickReview }) {
       </div>
       <strong>{review.picked.candidateName}</strong>
       <span>
-        {review.picked.position} · rank {review.rank}/{review.optionCount} · {signed(review.picked.delta)} OVR
+        {placementText(review.picked)} · rank {review.rank}/{review.optionCount} · {signed(review.picked.delta)} OVR
       </span>
       <p className="small-copy">
         {pickedBest

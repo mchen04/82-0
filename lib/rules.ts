@@ -1,4 +1,14 @@
-import { POSITIONS, type CapType, type Lineup, type LineupSlot, type PlayerSeason, type Position, type ProjectedResult } from "./types";
+import {
+  POSITIONS,
+  type CapType,
+  type Lineup,
+  type LineupPlacementMove,
+  type LineupPlacementOption,
+  type LineupSlot,
+  type PlayerSeason,
+  type Position,
+  type ProjectedResult,
+} from "./types";
 
 export const HARD_CAP_AMOUNT = 88;
 export const SOFT_CAP_AMOUNT = 100;
@@ -370,4 +380,94 @@ export function toLineupSlot(position: Position, player: PlayerSeason, cost = sa
     perGame: player.perGame,
     ratings: player.ratings,
   };
+}
+
+type PlacementPlayer = Pick<PlayerSeason, "positions">;
+type AssignedSlot = {
+  fromPosition: Position;
+  position: Position;
+  slot: LineupSlot;
+};
+
+export function legalPlacementOptions(lineup: Lineup, player: PlacementPlayer): LineupPlacementOption[] {
+  const playerPositions = player.positions.filter((position, index) => player.positions.indexOf(position) === index);
+  return playerPositions.flatMap((position) => {
+    const assignment = lineupAssignment(lineup, player, position);
+    return assignment ? [{ position, moves: movesForAssignment(assignment) }] : [];
+  }).sort((a, b) => a.moves.length - b.moves.length || playerPositions.indexOf(a.position) - playerPositions.indexOf(b.position));
+}
+
+export function fillablePositions(lineup: Lineup): Position[] {
+  return legalPlacementOptions(lineup, { positions: [...POSITIONS] }).map((option) => option.position);
+}
+
+export function placePlayerInLineup(lineup: Lineup, player: PlayerSeason, cost: number, position: Position): { lineup: Lineup; moves: LineupPlacementMove[] } | null {
+  const assignment = lineupAssignment(lineup, player, position);
+  if (!assignment) return null;
+
+  const nextLineup: Lineup = {};
+  for (const assigned of assignment) {
+    nextLineup[assigned.position] = { ...assigned.slot, position: assigned.position };
+  }
+  nextLineup[position] = toLineupSlot(position, player, cost);
+  return { lineup: nextLineup, moves: movesForAssignment(assignment) };
+}
+
+function lineupAssignment(lineup: Lineup, player: PlacementPlayer, targetPosition: Position): AssignedSlot[] | null {
+  if (!player.positions.includes(targetPosition)) return null;
+
+  const existing = POSITIONS.flatMap((position) => {
+    const slot = lineup[position];
+    return slot ? [{ fromPosition: position, slot }] : [];
+  });
+  if (existing.length >= POSITIONS.length) return null;
+
+  const assignedPositions = new Set<Position>([targetPosition]);
+  let best: AssignedSlot[] | null = null;
+
+  function search(index: number, assigned: AssignedSlot[]) {
+    if (index === existing.length) {
+      if (!best || compareAssignments(assigned, best) < 0) best = assigned.map((slot) => ({ ...slot }));
+      return;
+    }
+
+    const current = existing[index];
+    const options = orderedSlotPositions(current.fromPosition, current.slot).filter((position) => !assignedPositions.has(position));
+    for (const position of options) {
+      assignedPositions.add(position);
+      assigned.push({ fromPosition: current.fromPosition, position, slot: current.slot });
+      if (!best || movesForAssignment(assigned).length <= movesForAssignment(best).length) search(index + 1, assigned);
+      assigned.pop();
+      assignedPositions.delete(position);
+    }
+  }
+
+  search(0, []);
+  return best;
+}
+
+function orderedSlotPositions(currentPosition: Position, slot: LineupSlot) {
+  const options = POSITIONS.filter((position) => slot.positions.includes(position));
+  return options.sort((a, b) => Number(b === currentPosition) - Number(a === currentPosition) || POSITIONS.indexOf(a) - POSITIONS.indexOf(b));
+}
+
+function movesForAssignment(assignment: AssignedSlot[]): LineupPlacementMove[] {
+  return assignment
+    .filter((slot) => slot.fromPosition !== slot.position)
+    .map((slot) => ({
+      playerId: slot.slot.playerId,
+      player: slot.slot.player,
+      fromPosition: slot.fromPosition,
+      position: slot.position,
+    }));
+}
+
+function compareAssignments(left: AssignedSlot[], right: AssignedSlot[]) {
+  const leftMoves = movesForAssignment(left);
+  const rightMoves = movesForAssignment(right);
+  return leftMoves.length - rightMoves.length || moveSignature(leftMoves).localeCompare(moveSignature(rightMoves));
+}
+
+function moveSignature(moves: LineupPlacementMove[]) {
+  return moves.map((move) => `${POSITIONS.indexOf(move.fromPosition)}:${POSITIONS.indexOf(move.position)}`).join("|");
 }

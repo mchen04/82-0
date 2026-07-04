@@ -22,7 +22,7 @@ import {
   type RunRow,
 } from "./lobby-repository";
 import { buildPublicMatch } from "./lobby-serializer";
-import { capAmountFor, isLegalCost, maxLegalCost, openPositions, scoreLineup, selectedPlayerIds, slotCount, toLineupSlot } from "./rules";
+import { capAmountFor, fillablePositions, isLegalCost, maxLegalCost, placePlayerInLineup, scoreLineup, selectedPlayerIds, slotCount } from "./rules";
 import { id, lobbyCode, pickRandom, secretToken, shuffleBySeed } from "./random";
 import { POSITIONS, type Lineup, type PlayerSeason, type Position, type PublicLobbyState, type Spin } from "./types";
 
@@ -443,7 +443,6 @@ async function placePick(
   const spin = shared ? match.current_spin : run.current_spin;
   if (!spin) throw new AppError(409, "spin_required", "Spin before picking.");
   if (!POSITIONS.includes(position)) throw new AppError(400, "bad_position", "Invalid position.");
-  if (run.lineup[position]) throw new AppError(409, "position_filled", "That lineup slot is already filled.");
 
   const player = await getPlayerSeason(client, playerSeasonId);
   if (!player) throw new AppError(404, "player_not_found", "Player not found.");
@@ -457,7 +456,10 @@ async function placePick(
     throw new AppError(409, "cap_violation", "That pick would leave too little budget for the remaining roster slots.");
   }
 
-  const lineup = { ...run.lineup, [position]: toLineupSlot(position, player.data, player.cost) };
+  const placement = placePlayerInLineup(run.lineup, player.data, player.cost, position);
+  if (!placement) throw new AppError(409, "position_filled", "No legal role move makes room for that player.");
+
+  const { lineup, moves } = placement;
   const capSpent = run.cap_spent + player.cost;
   const pickCount = await client.query<{ next_pick: number }>(
     `SELECT coalesce(max(pick_number), 0) + 1 AS next_pick FROM picks WHERE match_id = $1`,
@@ -470,6 +472,12 @@ async function placePick(
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
     [id(), lobby.id, match.id, run.id, playerId, player.player_id, position, player.team, player.era, player.cost, nextPick],
   );
+  for (const move of moves) {
+    await client.query(
+      `UPDATE picks SET position = $3 WHERE run_id = $1 AND player_season_id = $2`,
+      [run.id, move.playerId, move.position],
+    );
+  }
 
   const playerLineup = POSITIONS.map((slot) => lineup[slot]).filter(Boolean);
   if (playerLineup.length === 5) {
@@ -490,7 +498,7 @@ async function placePick(
     await autoLoseIfNoLegalPick(client, lobby, match, { ...run, lineup, cap_spent: capSpent, current_spin: null }, shared);
   }
 
-  await recordEvent(client, lobby.id, match.id, playerId, "pick.made", { player: player.player_name, position, cost: player.cost });
+  await recordEvent(client, lobby.id, match.id, playerId, "pick.made", { player: player.player_name, position, cost: player.cost, moves });
 }
 
 async function movePick(
@@ -569,8 +577,9 @@ async function loseRun(client: PoolClient, lobby: LobbyRow, matchId: string, run
 }
 
 async function legalTeamEras(client: PoolClient, lobby: LobbyRow, match: MatchRow, run: RunRow, shared: boolean, sharedSelectedIds?: string[]): Promise<Spin[]> {
-  const open = openPositions(run.lineup);
-  if (open.length === 0) return [];
+  if (slotCount(run.lineup) >= 5) return [];
+  const fillable = fillablePositions(run.lineup);
+  if (fillable.length === 0) return [];
   const excluded = shared ? sharedSelectedIds ?? await selectedIdsForMatch(client, match.id) : selectedPlayerIds(run.lineup);
   const maxCost = maxLegalCost(lobby.cap_type, lobby.cap_amount, run.cap_spent, slotCount(run.lineup));
   if (maxCost < 3) return [];
@@ -587,7 +596,7 @@ async function legalTeamEras(client: PoolClient, lobby: LobbyRow, match: MatchRo
          AND ($3::boolean = true OR ps.cost <= $4)
      )
      ORDER BY te.team, te.era`,
-    [excluded, open, lobby.cap_type === "soft", Number.isFinite(maxCost) ? maxCost : 999],
+    [excluded, fillable, lobby.cap_type === "soft", Number.isFinite(maxCost) ? maxCost : 999],
   );
   return result.rows;
 }
@@ -666,8 +675,9 @@ async function chooseLegalSnakeSpinForCycle(client: PoolClient, lobby: LobbyRow,
 }
 
 async function hasLegalPickForSpin(client: DbClient, lobby: LobbyRow, match: MatchRow, run: RunRow, spin: Spin, shared: boolean, sharedSelectedIds?: string[]) {
-  const open = openPositions(run.lineup);
-  if (open.length === 0) return false;
+  if (slotCount(run.lineup) >= 5) return false;
+  const fillable = fillablePositions(run.lineup);
+  if (fillable.length === 0) return false;
   const excluded = shared ? sharedSelectedIds ?? await selectedIdsForMatch(client, match.id) : selectedPlayerIds(run.lineup);
   const maxCost = maxLegalCost(lobby.cap_type, lobby.cap_amount, run.cap_spent, slotCount(run.lineup));
   if (maxCost < 3) return false;
@@ -680,7 +690,7 @@ async function hasLegalPickForSpin(client: DbClient, lobby: LobbyRow, match: Mat
        AND positions && $4::text[]
        AND ($5::boolean = true OR cost <= $6)
      LIMIT 1`,
-    [spin.team, spin.era, excluded, open, lobby.cap_type === "soft", Number.isFinite(maxCost) ? maxCost : 999],
+    [spin.team, spin.era, excluded, fillable, lobby.cap_type === "soft", Number.isFinite(maxCost) ? maxCost : 999],
   );
   return (result.rowCount ?? 0) > 0;
 }

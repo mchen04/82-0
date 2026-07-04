@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { evaluateTiannaBoard } from "../components/tianna-analysis";
 import { scoreLineupProgress } from "../lib/rules";
-import type { Candidate, LineupSlot, PlayerSeason, Position, PublicLobbyState, PublicRun } from "../lib/types";
+import type { Candidate, LineupPlacementMove, LineupSlot, PlayerSeason, Position, PublicLobbyState, PublicRun } from "../lib/types";
 
 const ratings = { creation: 80, defense: 75, efficiency: 70, rebounding: 70, rimProtection: 80, scoring: 85, shootingGravity: 80, turnoverControl: 60 };
 const perGame = { ppg: 20, apg: 5, rpg: 6 };
@@ -12,7 +12,25 @@ function baseSlot(position: Position, overall: number): LineupSlot {
 }
 
 function center(id: string, cost: number, overall: number): Candidate {
-  return { id, player: id, team: "TST", era: "2020s", positions: ["C"], overall, perGame, ratings, cost, assignable: true, affordable: true, openPositions: ["C"] };
+  return candidate(id, cost, overall, ["C"], "C");
+}
+
+function candidate(id: string, cost: number, overall: number, positions: Position[], position: Position, moves: LineupPlacementMove[] = []): Candidate {
+  return {
+    id,
+    player: id,
+    team: "TST",
+    era: "2020s",
+    positions,
+    overall,
+    perGame,
+    ratings,
+    cost,
+    assignable: true,
+    affordable: true,
+    openPositions: [position],
+    placementOptions: [{ position, moves }],
+  };
 }
 
 const lineup = { PG: baseSlot("PG", 90), SG: baseSlot("SG", 88), SF: baseSlot("SF", 86), PF: baseSlot("PF", 84) };
@@ -46,4 +64,19 @@ test("board evaluation ranks the soft-cap final pick by penalized strength", () 
 test("board evaluation keeps raw ranking when the soft cap is not exceeded", () => {
   const board = evaluate(40);
   assert.equal(board?.best?.candidateId, "expensive");
+});
+
+test("board evaluation considers candidates that require moving an existing role", () => {
+  const movableLineup = {
+    C: { ...baseSlot("C", 80), playerId: "movable", player: "Movable Big", positions: ["C", "PF"] },
+  };
+  const move: LineupPlacementMove = { playerId: "movable", player: "Movable Big", fromPosition: "C", position: "PF" };
+  const centerOnly = candidate("center-only", 8, 88, ["C"], "C", [move]);
+  const state = { capType: "hard", capAmount: 88 } as PublicLobbyState;
+  const run = { capSpent: 10, lineup: movableLineup } as PublicRun;
+
+  const board = evaluateTiannaBoard(state, run, [centerOnly]);
+  assert.equal(board?.options.length, 1);
+  assert.equal(board?.best?.candidateId, "center-only");
+  assert.equal(board?.best?.moves[0]?.position, "PF");
 });

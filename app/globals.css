@@ -507,6 +507,10 @@ a {
   line-height: 1;
 }
 
+.candidate-button .small-copy {
+  overflow-wrap: anywhere;
+}
+
 .stats-row {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));

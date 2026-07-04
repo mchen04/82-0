@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, Copy, Crown, Play, Shuffle, Swords, Trophy } from "lucide-react";
 import { Header } from "./home-app";
-import { formatStat, HARD_CAP_AMOUNT, SOFT_CAP_AMOUNT } from "@/lib/rules";
+import { formatStat, HARD_CAP_AMOUNT, initials, SOFT_CAP_AMOUNT } from "@/lib/rules";
 import { Court, MobileLineup, Opponents, Standings } from "./lobby-lineup";
 import { TiannaAnalysis, buildTiannaPickReview, evaluateTiannaBoard, type TiannaPickReview } from "./tianna-analysis";
 import {
@@ -511,8 +511,8 @@ function BoardPanel({
   const subtitle = poolCount ? `${candidates.length} of ${poolCount} players in pool` : "Each spin reveals one team and one decade";
 
   function pickFromCard(candidate: Candidate) {
-    const position = candidate.openPositions[0];
-    if (position) onPick(candidate, position);
+    const placement = candidate.placementOptions[0];
+    if (placement) onPick(candidate, placement.position);
   }
 
   return (
@@ -608,12 +608,21 @@ function CandidateCard({ candidate, disabled, onSelect }: { candidate: Candidate
           {candidate.positions.join(" / ")} · {candidate.team} · {candidate.era}
         </p>
         <p className="small-copy">
-          {candidate.assignable ? `Drafts at ${candidate.openPositions[0]}` : candidate.affordable ? "No open eligible slot" : "Too expensive for the hard-cap reserve"}
+          {candidate.assignable ? placementLabel(candidate) : candidate.affordable ? "No legal lineup fit" : "Too expensive for the hard-cap reserve"}
         </p>
       </div>
       <Stats player={candidate} cost={candidate.cost} affordable={candidate.affordable} />
     </button>
   );
+}
+
+function placementLabel(candidate: Candidate) {
+  const placement = candidate.placementOptions[0];
+  if (!placement) return "No legal lineup fit";
+  const firstMove = placement.moves[0];
+  if (!firstMove) return `Drafts at ${placement.position}`;
+  const extra = placement.moves.length > 1 ? ` +${placement.moves.length - 1}` : "";
+  return `Drafts at ${placement.position}; moves ${initials(firstMove.player)} to ${firstMove.position}${extra}`;
 }
 
 function Stats({ player, cost, affordable = true }: { player: Candidate | LineupSlot; cost?: number; affordable?: boolean }) {
