@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Brain, Gauge, Target, TrendingUp } from "lucide-react";
+import { Brain, Target, TrendingUp } from "lucide-react";
 import { effectiveOverall, formatStat, maxLegalCost, scoreLineupProgress, slotCount, type LineupProgressResult } from "@/lib/rules";
 import {
   POSITIONS,
@@ -206,18 +206,15 @@ export function TiannaAnalysis({
   if (!state || !run) return null;
   const profile = profileForRun(state, run);
   const best = board?.best ?? null;
-  const owner = run.playerId === state.viewerPlayerId ? null : state.players.find((player) => player.id === run.playerId)?.name;
+  const waitingForTurn = state.activeMatch?.mode === "snake" && state.activeMatch.currentTurnPlayerId !== state.viewerPlayerId;
 
   return (
     <section className="panel panel-pad stack tianna-panel" data-testid="tianna-analysis">
       <div className="tianna-header">
-        <Brain size={22} />
+        <Brain size={20} />
         <div>
           <p className="section-title">Tianna Mode</p>
-          <p className="eyebrow">
-            {owner ? `${owner} · ` : ""}
-            {profile.filled}/5 slots · ${run.budgetLeft} left
-          </p>
+          <p className="eyebrow">Your board only · {profile.filled}/5 slots · ${run.budgetLeft} left</p>
         </div>
       </div>
 
@@ -229,7 +226,11 @@ export function TiannaAnalysis({
             {profile.current.wins !== null ? `${profile.current.wins}-${82 - profile.current.wins} ${profile.current.label}` : "partial projection"}
           </span>
         </div>
-        <Gauge size={24} />
+        <div>
+          <p className="eyebrow">Budget Window</p>
+          <strong>{Number.isFinite(profile.maxNextCost) ? `$${profile.maxNextCost}` : "Open"}</strong>
+          <span>{state.capType === "hard" ? "max next legal cost" : "soft cap overspend ok"}</span>
+        </div>
       </div>
 
       <div className="tianna-metrics">
@@ -246,16 +247,10 @@ export function TiannaAnalysis({
         <TiannaList title="Need" items={profile.needs} />
       </div>
 
-      <div className="tianna-budget">
-        <p className="eyebrow">Budget Window</p>
-        <strong>{Number.isFinite(profile.maxNextCost) ? `$${profile.maxNextCost}` : "Open"}</strong>
-        <span>{state.capType === "hard" ? "max next hard-cap legal cost" : "soft cap allows overspend"}</span>
-      </div>
-
       <TiannaCallout
         icon={<Target size={18} />}
         label="Best Board Pick"
-        empty="Spin to load a board."
+        empty={run.status !== "active" ? "Lineup locked." : waitingForTurn ? "Waiting for your turn." : "Spin to load a board."}
         option={best}
       />
 

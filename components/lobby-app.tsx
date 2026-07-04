@@ -114,15 +114,14 @@ export function LobbyApp({ code }: { code: string }) {
   const isHost = Boolean(state?.viewerPlayerId && state.hostPlayerId === state.viewerPlayerId);
   const activeMatch = state?.activeMatch ?? null;
   const visibleRun = viewerRun ?? currentRun;
-  const analysisRun = activeMatch?.mode === "snake" ? currentRun : viewerRun;
   const activeSpin = activeMatch?.mode === "snake" ? activeMatch.currentSpin : viewerRun?.currentSpin ?? null;
   const showDraftLayout = Boolean(token && activeMatch && state?.status !== "lobby");
   const tiannaDraftLayout = Boolean(showDraftLayout && state?.tiannaMode);
   const canPickLineup = canAct && !busy && viewerRun?.status === "active";
   const canMoveLineup = !busy && viewerRun?.status === "active";
   const tiannaBoard = useMemo(
-    () => (state?.tiannaMode ? evaluateTiannaBoard(state, analysisRun, activeMatch?.candidates ?? []) : null),
-    [activeMatch?.candidates, analysisRun, state],
+    () => (state?.tiannaMode && canAct ? evaluateTiannaBoard(state, viewerRun, activeMatch?.candidates ?? []) : null),
+    [activeMatch?.candidates, canAct, state, viewerRun],
   );
   async function pickFromSelected(position: Position) {
     if (!selected) return;
@@ -301,7 +300,7 @@ export function LobbyApp({ code }: { code: string }) {
               ) : null}
               {!showDraftLayout ? <Opponents state={state} /> : null}
               <Standings state={state} onNext={() => action("next-match")} isHost={isHost} busy={busy} />
-              {tiannaDraftLayout ? <TiannaAnalysis state={state} run={analysisRun} board={tiannaBoard} lastPick={lastTiannaPick} /> : null}
+              {tiannaDraftLayout ? <TiannaAnalysis state={state} run={viewerRun} board={tiannaBoard} lastPick={lastTiannaPick} /> : null}
             </>
           ) : null}
         </aside>
@@ -493,6 +492,7 @@ function BoardPanel({
   const [query, setQuery] = useState("");
   const [position, setPosition] = useState<Position | "All">("All");
   const [sort, setSort] = useState<SortKey>("PPG");
+  const [affordableOnly, setAffordableOnly] = useState(false);
   const match = state?.activeMatch;
   const ownFinal = viewerRun?.finalResult;
   const poolCount = match?.candidates.length ?? 0;
@@ -501,17 +501,24 @@ function BoardPanel({
     const filtered = (match?.candidates ?? []).filter((candidate) => {
       const matchesQuery = !needle || candidate.player.toLowerCase().includes(needle) || candidate.positions.join(" ").toLowerCase().includes(needle);
       const matchesPosition = position === "All" || candidate.positions.includes(position);
-      return matchesQuery && matchesPosition;
+      const matchesBudget = !affordableOnly || candidate.affordable;
+      return matchesQuery && matchesPosition && matchesBudget;
     });
-    const value = (candidate: Candidate) => {
-      if (sort === "APG") return candidate.perGame.apg;
-      if (sort === "RPG") return candidate.perGame.rpg;
-      if (sort === "Defense") return candidate.ratings.defense;
-      if (sort === "Gravity") return candidate.ratings.shootingGravity;
-      return candidate.perGame.ppg;
+    const compare = (a: Candidate, b: Candidate) => {
+      if (sort === "PriceLow") return a.cost - b.cost;
+      if (sort === "PriceHigh") return b.cost - a.cost;
+      const value = (candidate: Candidate) => {
+        if (sort === "APG") return candidate.perGame.apg;
+        if (sort === "RPG") return candidate.perGame.rpg;
+        if (sort === "Defense") return candidate.ratings.defense;
+        if (sort === "Gravity") return candidate.ratings.shootingGravity;
+        if (sort === "Overall") return candidate.overall;
+        return candidate.perGame.ppg;
+      };
+      return value(b) - value(a);
     };
-    return [...filtered].sort((a, b) => value(b) - value(a) || a.player.localeCompare(b.player));
-  }, [match?.candidates, position, query, sort]);
+    return [...filtered].sort((a, b) => compare(a, b) || a.player.localeCompare(b.player));
+  }, [affordableOnly, match?.candidates, position, query, sort]);
 
   if (ownFinal && (state?.status === "results" || match?.status === "complete")) {
     return <ResultPanel run={viewerRun} />;
@@ -523,7 +530,7 @@ function BoardPanel({
   const subtitle = selected ? `Placing ${selected.player}` : poolCount ? `${candidates.length} of ${poolCount} players in pool` : "Each spin reveals one team and one decade";
 
   return (
-    <section className="panel">
+    <section className="panel board-panel">
       <div className="black-head">
         <p className="black-head-title">{title}</p>
         <p className="black-head-subtitle">{subtitle}</p>
@@ -540,15 +547,30 @@ function BoardPanel({
             </div>
             <input className="input" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search player" aria-label="Search players" />
             <label className="sort-filter">
-              <span>Sort by category</span>
+              <span>Sort by</span>
               <select className="select" value={sort} onChange={(event) => setSort(event.target.value as SortKey)} aria-label="Sort players">
                 <option value="PPG">PPG</option>
                 <option value="APG">APG</option>
                 <option value="RPG">RPG</option>
                 <option value="Defense">Defense</option>
                 <option value="Gravity">Gravity</option>
+                <option value="Overall">Overall</option>
+                <option value="PriceLow">Price: Low to High</option>
+                <option value="PriceHigh">Price: High to Low</option>
               </select>
             </label>
+            <div className="sort-filter">
+              <span>Budget</span>
+              <button
+                className={`btn ${affordableOnly ? "green" : ""}`}
+                type="button"
+                aria-pressed={affordableOnly}
+                onClick={() => setAffordableOnly((current) => !current)}
+                data-testid="affordable-filter"
+              >
+                Affordable only
+              </button>
+            </div>
           </div>
           {candidates.length ? (
             <div className="candidate-list">

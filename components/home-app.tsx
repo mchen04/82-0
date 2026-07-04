@@ -89,7 +89,7 @@ export function HomeApp() {
           </button>
         </div>
 
-        <section className="panel panel-pad stack">
+        <section className="panel panel-pad stack home-create">
           <div className="setup-row">
             <label className="field">
               <span>Your name</span>
@@ -119,7 +119,7 @@ export function HomeApp() {
           </label>
         </section>
 
-        <section className="panel panel-pad stack">
+        <section className="panel panel-pad stack home-join">
           <div className="setup-row">
             <label className="field">
               <span>Lobby code</span>

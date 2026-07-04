@@ -287,6 +287,12 @@ async function verifyTiannaMode(port: number) {
     }
     if (text.includes('Spin to load a board.')) throw new Error('tianna board recommendation did not load');
   `);
+  await assertOneScreenFit();
+  await browser("set", "viewport", "1024", "768");
+  await assertOneScreenFit();
+  await browser("set", "viewport", "390", "780");
+  await assertNoHorizontalOverflow();
+  await browser("set", "viewport", "1280", "900");
 
   const snakeHost = await createLobby({ name: "Tianna Snake A", mode: "snake", capType: "hard", rerollsEnabled: true, tiannaMode: true });
   const snakeGuest = await joinLobby(snakeHost.code, { name: "Tianna Snake B" });
@@ -294,6 +300,7 @@ async function verifyTiannaMode(port: number) {
   state = await applyLobbyAction(snakeHost.code, { token: snakeHost.token, expectedVersion: state.stateVersion, action: "start" });
   const currentPlayerId = state.activeMatch?.currentTurnPlayerId;
   assert.ok(currentPlayerId, "tianna snake current drafter exists");
+  const currentToken = currentPlayerId === snakeHost.playerId ? snakeHost.token : snakeGuest.token;
   const nonCurrentToken = currentPlayerId === snakeHost.playerId ? snakeGuest.token : snakeHost.token;
   await browser("open", `http://127.0.0.1:${port}/lobby/${snakeHost.code}`);
   await evalPage(`localStorage.setItem(${JSON.stringify(`better82:${snakeHost.code}:token`)}, ${JSON.stringify(nonCurrentToken)}); location.reload();`);
@@ -302,10 +309,18 @@ async function verifyTiannaMode(port: number) {
     if (!panel) throw new Error('tianna snake analysis panel missing for non-current viewer');
     const text = panel.textContent ?? '';
     if (!text.includes('Best Board Pick')) throw new Error('tianna snake best board section missing');
-    if (text.includes('Spin to load a board.')) throw new Error('tianna snake board recommendation missing for non-current viewer');
+    if (!text.includes('Waiting for your turn.')) throw new Error('non-current snake viewer should not see a board recommendation');
     const cards = [...document.querySelectorAll('[data-testid="player-card"]')];
     if (!cards.length) throw new Error('tianna snake candidate board missing for non-current viewer');
     if (!cards.every((card) => card.disabled)) throw new Error('non-current snake viewer candidate cards should stay disabled');
+  `);
+  await evalPage(`localStorage.setItem(${JSON.stringify(`better82:${snakeHost.code}:token`)}, ${JSON.stringify(currentToken)}); location.reload();`);
+  await waitForPage(`
+    const panel = document.querySelector('[data-testid="tianna-analysis"]');
+    if (!panel) throw new Error('tianna snake analysis panel missing for current drafter');
+    const text = panel.textContent ?? '';
+    if (text.includes('Waiting for your turn.')) throw new Error('current drafter should see their own board recommendation');
+    if (text.includes('Spin to load a board.')) throw new Error('current drafter board recommendation did not load');
   `);
 }
 
@@ -477,8 +492,11 @@ async function assertLobbyProgressTooltipsStayInViewport() {
       if (slot.hasAttribute('title')) throw new Error('lobby progress mini slot should not use native title tooltip');
       const tooltip = slot.querySelector('.lineup-tooltip');
       if (!tooltip) throw new Error('lobby progress mini slot tooltip missing');
+      tooltip.style.display = 'block';
       slot.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, cancelable: true }));
       const rect = tooltip.getBoundingClientRect();
+      tooltip.style.display = '';
+      if (rect.width <= 0) throw new Error('lobby progress tooltip did not render for measurement');
       if (rect.left < -0.5 || rect.top < -0.5 || rect.right > window.innerWidth + 0.5 || rect.bottom > window.innerHeight + 0.5) {
         throw new Error('lobby progress tooltip escapes viewport: ' + JSON.stringify({
           left: rect.left,
@@ -490,6 +508,20 @@ async function assertLobbyProgressTooltipsStayInViewport() {
         }));
       }
     }
+  `);
+}
+
+async function assertOneScreenFit() {
+  await waitForPage(`
+    const se = document.scrollingElement;
+    if (se.scrollHeight > window.innerHeight + 1) throw new Error('page should fit one screen: ' + se.scrollHeight + ' > ' + window.innerHeight);
+  `);
+}
+
+async function assertNoHorizontalOverflow() {
+  await waitForPage(`
+    const se = document.scrollingElement;
+    if (se.scrollWidth > window.innerWidth + 1) throw new Error('page has horizontal overflow: ' + se.scrollWidth + ' > ' + window.innerWidth);
   `);
 }
 
