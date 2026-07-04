@@ -171,6 +171,7 @@ export type PublicLobbyState = {
   capType: CapType;
   capAmount: number;
   rerollsEnabled: boolean;
+  tiannaMode: boolean;
   stateVersion: number;
   lastActivityAt: string;
   expiresAt: string;

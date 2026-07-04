@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { loadGamePack } from "../lib/game-data";
-import { capAmountFor, HARD_CAP_AMOUNT, isLegalCost, maxLegalCost, scoreLineup, SOFT_CAP_AMOUNT, salary } from "../lib/rules";
+import { capAmountFor, effectiveOverall, HARD_CAP_AMOUNT, isLegalCost, maxLegalCost, scoreLineup, SOFT_CAP_AMOUNT, salary } from "../lib/rules";
 
 test("salary is deterministic and bounded for public game data", () => {
   const players = loadGamePack().players.slice(0, 250);
@@ -40,4 +40,16 @@ test("soft cap permits overspend and applies deterministic win penalty", () => {
   assert.equal(soft.softOverspend, 8);
   assert.equal(soft.softPenaltyWins, 4);
   assert.equal(soft.wins, Math.max(0, hardish.wins - 4));
+});
+
+test("effective overall ranks soft-cap lineups by penalized strength", () => {
+  const base = { losses: 0, grade: "A", label: "", reasons: [] };
+  const expensive = { ...base, team_ovr: 90, wins: 61, softPenaltyWins: 15, softOverspend: 30 };
+  const value = { ...base, team_ovr: 89, wins: 74, softPenaltyWins: 1, softOverspend: 2 };
+  const clean = { ...base, team_ovr: 89, wins: 75 };
+  const partialPenalized = { ...base, team_ovr: 55.2, wins: null, grade: null, label: "PARTIAL", softPenaltyWins: 6, softOverspend: 12 };
+
+  assert.equal(effectiveOverall(clean), 89);
+  assert.equal(effectiveOverall(partialPenalized), 55.2);
+  assert.equal(effectiveOverall(value) > effectiveOverall(expensive), true);
 });

@@ -11,6 +11,7 @@ export type LobbyRow = {
   cap_amount: number;
   status: LobbyStatus;
   rerolls_enabled: boolean;
+  tianna_mode: boolean;
   host_player_id: string | null;
   active_match_id: string | null;
   state_version: number;
@@ -77,6 +78,7 @@ const LOBBY_COLUMNS = `
   cap_amount,
   status,
   rerolls_enabled,
+  tianna_mode,
   host_player_id,
   active_match_id,
   state_version,

@@ -147,9 +147,9 @@ function PlayerInitials({ slot, className, children }: { slot: LineupSlot; class
   );
 }
 
-export function MobileLineup({ lineup, selected, movingPosition, canPick, canMove, onPick, onStartMove, onMove }: LineupPickerProps) {
+export function MobileLineup({ lineup, selected, movingPosition, canPick, canMove, onPick, onStartMove, onMove, variant = "fixed" }: LineupPickerProps & { variant?: "fixed" | "inline" }) {
   return (
-    <section className="mobile-lineup" data-testid="mobile-lineup-strip">
+    <section className={`mobile-lineup ${variant === "inline" ? "lineup-inline" : ""}`} data-testid="mobile-lineup-strip">
       <div className="mobile-slots">
         {POSITIONS.map((position) => {
           const slot = lineup[position];

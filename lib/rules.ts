@@ -5,6 +5,17 @@ export const SOFT_CAP_AMOUNT = 100;
 export const CAP_AMOUNT = HARD_CAP_AMOUNT;
 export const MINIMUM_SLOT_COST = 3;
 
+export type LineupProgressResult = {
+  team_ovr: number;
+  wins: number | null;
+  losses: number | null;
+  grade: string | null;
+  label: string;
+  reasons: string[];
+  softPenaltyWins?: number;
+  softOverspend?: number;
+};
+
 const clamp = (value: number, min = 0, max = 100) => Math.max(min, Math.min(max, value));
 const avg = (values: number[]) => values.reduce((total, value) => total + value, 0) / values.length;
 
@@ -104,16 +115,16 @@ function gradeForWins(wins: number): [string, string] {
   return ["F", "TANKING"];
 }
 
+const WINS_PER_OVERALL_POINT = 1.32;
+
 function winsFromOverall(teamOverall: number) {
-  const baseline = (teamOverall - 35) * 1.32;
+  const baseline = (teamOverall - 35) * WINS_PER_OVERALL_POINT;
   const eliteBump = clamp((teamOverall - 72) / 8, 0, 1) * clamp((96 - teamOverall) / 8, 0, 1) * 4;
   const wins = Math.round(clamp(baseline + eliteBump, 0, 82));
   return teamOverall >= 99 ? wins : Math.min(wins, 81);
 }
 
-export function projectLineup(players: PlayerSeason[]): ProjectedResult {
-  if (players.length !== 5) throw new Error("lineup must contain exactly five players");
-
+function projectLineupCore(players: PlayerSeason[], partial: boolean) {
   const ratings = players.map((player) => player.ratings);
   const overalls = players.map((player) => player.overall);
   const overallAverage = avg(overalls);
@@ -136,13 +147,14 @@ export function projectLineup(players: PlayerSeason[]): ProjectedResult {
   const passableShooters = ratings.filter((rating) => rating.shootingGravity >= 60).length;
   const redundantCreators = ratings.filter((rating) => rating.creation >= 75 && rating.shootingGravity < 60).length >= 2;
   const cramped = avgShooting < 58 || lowGravity >= 3;
+  const scale = partial ? players.length / 5 : 1;
   let adjustment = 0;
   const reasons: string[] = [];
 
   if (maxCreation >= 90) {
     adjustment += 2;
     reasons.push("Elite creator");
-  } else if (maxCreation < 65) {
+  } else if ((!partial || players.length >= 2) && maxCreation < 65) {
     adjustment -= 3.5;
     reasons.push("Weak primary creation");
   }
@@ -167,16 +179,16 @@ export function projectLineup(players: PlayerSeason[]): ProjectedResult {
   } else if (maxShooting >= 85) {
     adjustment += 1;
     reasons.push("Elite spacer");
-  } else if (avgShooting < 50) {
+  } else if ((!partial || players.length >= 2) && avgShooting < 50) {
     adjustment -= 2.5;
     reasons.push("Weak spacing");
   }
-  if (lowGravity >= 3) {
+  if ((!partial || players.length >= 3) && lowGravity >= 3) {
     adjustment -= 2;
     reasons.push("Crowded floor");
   }
-  if (lowGravity >= 4) adjustment -= 1.5;
-  if (veryLowGravity >= 3) {
+  if ((!partial || players.length >= 4) && lowGravity >= 4) adjustment -= 1.5;
+  if ((!partial || players.length >= 3) && veryLowGravity >= 3) {
     adjustment -= 1;
     reasons.push(eliteShooters >= 1 && passableShooters >= 2 ? "Low-gravity frontcourt" : "Too many non-shooters");
   }
@@ -184,26 +196,26 @@ export function projectLineup(players: PlayerSeason[]): ProjectedResult {
     adjustment -= 1.5;
     reasons.push("Paint overlap");
   }
-  if (interiorNonShooters >= 3) adjustment -= 1.5;
-  if (eliteShooters === 0) {
+  if ((!partial || players.length >= 3) && interiorNonShooters >= 3) adjustment -= 1.5;
+  if ((!partial || players.length >= 2) && eliteShooters === 0) {
     adjustment -= 1.5;
     reasons.push("No elite spacer");
   }
   if (maxRimProtection >= 85) {
     adjustment += 1.8;
     reasons.push("Strong rim protection");
-  } else if (maxRimProtection < 45) {
+  } else if ((!partial || players.length >= 2) && maxRimProtection < 45) {
     adjustment -= 3;
     reasons.push("No rim protection");
   }
   if (avgDefense >= 75) {
     adjustment += 1.4;
     reasons.push("Strong team defense");
-  } else if (avgDefense < 50) {
+  } else if ((!partial || players.length >= 2) && avgDefense < 50) {
     adjustment -= 2.5;
     reasons.push("Defensive liability");
   }
-  if (avgRebounding < 45) {
+  if ((!partial || players.length >= 2) && avgRebounding < 45) {
     adjustment -= 1.8;
     reasons.push("Weak rebounding");
   }
@@ -219,17 +231,17 @@ export function projectLineup(players: PlayerSeason[]): ProjectedResult {
     adjustment += 1.5;
     reasons.push("Transition pressure");
   }
-  if (topThreeAverage >= 88) {
+  if ((!partial || players.length >= 3) && topThreeAverage >= 88) {
     adjustment += 3.2;
     reasons.push("Hall of Fame core");
-  } else if (topThreeAverage >= 82) {
+  } else if ((!partial || players.length >= 2) && topThreeAverage >= 82) {
     adjustment += 1.2;
     reasons.push("High-end talent");
   }
-  if (avgTurnoverControl < 30 && (redundantCreators || cramped)) {
+  if ((!partial || players.length >= 3) && avgTurnoverControl < 30 && (redundantCreators || cramped)) {
     adjustment -= 1;
     reasons.push("Turnover risk");
-  } else if (avgTurnoverControl < 45 && redundantCreators && cramped) {
+  } else if ((!partial || players.length >= 3) && avgTurnoverControl < 45 && redundantCreators && cramped) {
     adjustment -= 0.5;
     reasons.push("Turnover risk");
   }
@@ -239,7 +251,14 @@ export function projectLineup(players: PlayerSeason[]): ProjectedResult {
     reasons.push("Redundant ball-dominant creators");
   }
 
-  const teamOverall = Number(clamp(overallAverage + adjustment).toFixed(1));
+  const teamOverall = Number(clamp(overallAverage + adjustment * scale).toFixed(1));
+  return { teamOverall, reasons };
+}
+
+export function projectLineup(players: PlayerSeason[]): ProjectedResult {
+  if (players.length !== 5) throw new Error("lineup must contain exactly five players");
+
+  const { teamOverall, reasons } = projectLineupCore(players, false);
   const wins = winsFromOverall(teamOverall);
   const [grade, label] = gradeForWins(wins);
   return {
@@ -249,6 +268,31 @@ export function projectLineup(players: PlayerSeason[]): ProjectedResult {
     grade,
     label,
     reasons,
+  };
+}
+
+export function scoreLineupProgress(players: PlayerSeason[], capType: CapType, capAmount: number, spent: number): LineupProgressResult {
+  if (players.length > 5) throw new Error("lineup cannot contain more than five players");
+  if (players.length === 5) return scoreLineup(players, capType, capAmount, spent);
+  if (players.length === 0) return { team_ovr: 0, wins: null, losses: null, grade: null, label: "EMPTY", reasons: [] };
+
+  const { teamOverall, reasons } = projectLineupCore(players, true);
+  if (capType !== "soft" || spent <= capAmount) {
+    return { team_ovr: teamOverall, wins: null, losses: null, grade: null, label: "PARTIAL", reasons };
+  }
+
+  const overspend = spent - capAmount;
+  const penalty = Math.min(24, Math.ceil(overspend / 2));
+  const penaltyOverall = penalty / WINS_PER_OVERALL_POINT;
+  return {
+    team_ovr: Number(clamp(teamOverall - penaltyOverall).toFixed(1)),
+    wins: null,
+    losses: null,
+    grade: null,
+    label: "PARTIAL",
+    softPenaltyWins: penalty,
+    softOverspend: overspend,
+    reasons: [...reasons, `Soft cap penalty pace: -${penalty} wins`],
   };
 }
 
@@ -270,6 +314,13 @@ export function scoreLineup(players: PlayerSeason[], capType: CapType, capAmount
     softOverspend: overspend,
     reasons: [...result.reasons, `Soft cap penalty: -${penalty} wins`],
   };
+}
+
+// Comparable strength on the OVR scale: full-lineup results carry the soft-cap
+// penalty in wins only, while partial results already bake it into team_ovr.
+export function effectiveOverall(result: LineupProgressResult): number {
+  if (result.wins === null || !result.softPenaltyWins) return result.team_ovr;
+  return Number(clamp(result.team_ovr - result.softPenaltyWins / WINS_PER_OVERALL_POINT).toFixed(1));
 }
 
 export function capAmountFor(capType: CapType) {

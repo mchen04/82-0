@@ -5,6 +5,7 @@ import { Check, Copy, Crown, Play, Shuffle, Swords, Trophy } from "lucide-react"
 import { Header } from "./home-app";
 import { formatStat, HARD_CAP_AMOUNT, SOFT_CAP_AMOUNT } from "@/lib/rules";
 import { Court, MobileLineup, Opponents, Standings } from "./lobby-lineup";
+import { TiannaAnalysis, buildTiannaPickReview, evaluateTiannaBoard, type TiannaPickReview } from "./tianna-analysis";
 import {
   POSITIONS,
   type Candidate,
@@ -32,6 +33,7 @@ export function LobbyApp({ code }: { code: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  const [lastTiannaPick, setLastTiannaPick] = useState<TiannaPickReview | null>(null);
   const stateVersionRef = useRef<number | null>(null);
   const stateTokenRef = useRef<string | null>(null);
 
@@ -112,10 +114,38 @@ export function LobbyApp({ code }: { code: string }) {
   const isHost = Boolean(state?.viewerPlayerId && state.hostPlayerId === state.viewerPlayerId);
   const activeMatch = state?.activeMatch ?? null;
   const visibleRun = viewerRun ?? currentRun;
+  const analysisRun = activeMatch?.mode === "snake" ? currentRun : viewerRun;
   const activeSpin = activeMatch?.mode === "snake" ? activeMatch.currentSpin : viewerRun?.currentSpin ?? null;
   const showDraftLayout = Boolean(token && activeMatch && state?.status !== "lobby");
+  const tiannaDraftLayout = Boolean(showDraftLayout && state?.tiannaMode);
   const canPickLineup = canAct && !busy && viewerRun?.status === "active";
   const canMoveLineup = !busy && viewerRun?.status === "active";
+  const tiannaBoard = useMemo(
+    () => (state?.tiannaMode ? evaluateTiannaBoard(state, analysisRun, activeMatch?.candidates ?? []) : null),
+    [activeMatch?.candidates, analysisRun, state],
+  );
+  async function pickFromSelected(position: Position) {
+    if (!selected) return;
+    const review = buildTiannaPickReview(selected, position, tiannaBoard);
+    const applied = await action("pick", { playerSeasonId: selected.id, position });
+    if (applied) setLastTiannaPick(review);
+  }
+  const inlineLineup = (
+    <MobileLineup
+      lineup={viewerRun?.lineup ?? {}}
+      selected={selected}
+      movingPosition={movingPosition}
+      canPick={canPickLineup}
+      canMove={canMoveLineup}
+      onPick={pickFromSelected}
+      onStartMove={(position) => {
+        setSelected(null);
+        setMovingPosition((current) => current === position ? null : position);
+      }}
+      onMove={(fromPosition, position) => action("move-pick", { fromPosition, position })}
+      variant="inline"
+    />
+  );
   const capStatusPanel = <CapStatus state={state} run={visibleRun} />;
   const spinPanel = (
     <SpinPanel
@@ -140,9 +170,13 @@ export function LobbyApp({ code }: { code: string }) {
       }}
       canAct={canAct}
       busy={busy}
-      onPick={(position) => selected && action("pick", { playerSeasonId: selected.id, position })}
+      onPick={pickFromSelected}
     />
   );
+
+  useEffect(() => {
+    setLastTiannaPick(null);
+  }, [activeMatch?.id, state?.tiannaMode]);
 
   async function join() {
     setBusy(true);
@@ -165,7 +199,7 @@ export function LobbyApp({ code }: { code: string }) {
   }
 
   async function action(actionName: ActionName, payload: Record<string, unknown> = {}) {
-    if (!token || !state) return;
+    if (!token || !state) return false;
     setBusy(true);
     setError("");
     try {
@@ -179,9 +213,12 @@ export function LobbyApp({ code }: { code: string }) {
       rememberState(data);
       setSelected(null);
       setMovingPosition(null);
+      if (actionName !== "pick") setLastTiannaPick(null);
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Action failed.");
       await load().catch(() => undefined);
+      return false;
     } finally {
       setBusy(false);
     }
@@ -222,6 +259,7 @@ export function LobbyApp({ code }: { code: string }) {
               {error ? <div className="error">{error}</div> : null}
               {capStatusPanel}
               {spinPanel}
+              {tiannaDraftLayout ? inlineLineup : null}
               {state ? <Opponents state={state} /> : null}
             </div>
             <div className="draft-board">{boardPanel}</div>
@@ -246,34 +284,37 @@ export function LobbyApp({ code }: { code: string }) {
         <aside className="side">
           {state ? (
             <>
-              <Court
-                lineup={viewerRun?.lineup ?? {}}
-                selected={selected}
-                movingPosition={movingPosition}
-                canPick={canPickLineup}
-                canMove={canMoveLineup}
-                onPick={(position) => selected && action("pick", { playerSeasonId: selected.id, position })}
-                onStartMove={(position) => {
-                  setSelected(null);
-                  setMovingPosition((current) => current === position ? null : position);
-                }}
-                onMove={(fromPosition, position) => action("move-pick", { fromPosition, position })}
-              />
+              {!tiannaDraftLayout ? (
+                <Court
+                  lineup={viewerRun?.lineup ?? {}}
+                  selected={selected}
+                  movingPosition={movingPosition}
+                  canPick={canPickLineup}
+                  canMove={canMoveLineup}
+                  onPick={pickFromSelected}
+                  onStartMove={(position) => {
+                    setSelected(null);
+                    setMovingPosition((current) => current === position ? null : position);
+                  }}
+                  onMove={(fromPosition, position) => action("move-pick", { fromPosition, position })}
+                />
+              ) : null}
               {!showDraftLayout ? <Opponents state={state} /> : null}
               <Standings state={state} onNext={() => action("next-match")} isHost={isHost} busy={busy} />
+              {tiannaDraftLayout ? <TiannaAnalysis state={state} run={analysisRun} board={tiannaBoard} lastPick={lastTiannaPick} /> : null}
             </>
           ) : null}
         </aside>
       </section>
 
-      {state?.activeMatch ? (
+      {state?.activeMatch && !tiannaDraftLayout ? (
         <MobileLineup
           lineup={viewerRun?.lineup ?? {}}
           selected={selected}
           movingPosition={movingPosition}
           canPick={canPickLineup}
           canMove={canMoveLineup}
-          onPick={(position) => selected && action("pick", { playerSeasonId: selected.id, position })}
+          onPick={pickFromSelected}
           onStartMove={(position) => {
             setSelected(null);
             setMovingPosition((current) => current === position ? null : position);
@@ -332,10 +373,16 @@ function LobbySetup({ state, busy, isHost, onAction }: { state: PublicLobbyState
           Soft ${SOFT_CAP_AMOUNT}
         </button>
       </div>
-      <button className="btn" type="button" disabled={!isHost || busy} onClick={() => onAction("settings", { rerollsEnabled: !state.rerollsEnabled })}>
-        <Shuffle size={17} />
-        Draft rerolls {state.rerollsEnabled ? "on" : "off"}
-      </button>
+      <div className="settings-grid">
+        <button className="btn" type="button" disabled={!isHost || busy} onClick={() => onAction("settings", { rerollsEnabled: !state.rerollsEnabled })} data-testid="draft-rerolls-toggle">
+          <Shuffle size={17} />
+          Draft rerolls {state.rerollsEnabled ? "on" : "off"}
+        </button>
+        <button className={`btn ${state.tiannaMode ? "blue" : ""}`} type="button" disabled={!isHost || busy} onClick={() => onAction("settings", { tiannaMode: !state.tiannaMode })} data-testid="tianna-mode-toggle">
+          <Crown size={17} />
+          Tianna Mode {state.tiannaMode ? "on" : "off"}
+        </button>
+      </div>
       <div className="stack">
         {state.players.map((player) => (
           <div className="standing-row" key={player.id}>
