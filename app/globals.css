@@ -483,12 +483,6 @@ a {
   text-align: left;
 }
 
-.candidate-button.active {
-  border-color: var(--orange);
-  background: #fff7ed;
-  box-shadow: 4px 4px 0 var(--orange);
-}
-
 .candidate-button:disabled {
   opacity: 0.62;
   filter: grayscale(1);
@@ -513,29 +507,18 @@ a {
   line-height: 1;
 }
 
-.salary {
-  border: 2px solid #15803d;
-  background: var(--green);
-  padding: 0.12rem 0.4rem;
-  color: white;
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 0.66rem;
-  font-weight: 900;
-}
-
-.salary.bad {
-  color: #991b1b;
-  border-color: #b91c1c;
-  background: #fef2f2;
-}
-
 .stats-row {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 0.35rem;
 }
 
+.stats-row.with-cost {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
 .stat {
+  min-width: 0;
   text-align: center;
 }
 
@@ -545,6 +528,14 @@ a {
   font-size: 0.72rem;
   font-weight: 900;
   line-height: 1;
+}
+
+.stat-good strong {
+  color: var(--green);
+}
+
+.stat-bad strong {
+  color: var(--red);
 }
 
 .stat span {
@@ -745,6 +736,12 @@ a {
   --tooltip-shift-x: 0px;
   right: 0;
   left: auto;
+}
+
+.lineup-mini .mini-slot .lineup-tooltip {
+  --tooltip-shift-x: 0px;
+  right: auto;
+  left: 0;
 }
 
 .initials-tooltip:hover .lineup-tooltip,

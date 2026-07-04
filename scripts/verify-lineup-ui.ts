@@ -176,6 +176,7 @@ async function main() {
     `);
 
     await verifyTiannaMode(port);
+    await verifyDirectAmareDraft(port);
 
     console.log("Lineup UI verification passed.");
   } finally {
@@ -324,6 +325,47 @@ async function verifyTiannaMode(port: number) {
   `);
 }
 
+async function verifyDirectAmareDraft(port: number) {
+  const amare = loadGamePack().players.find((player) => player.id === "amare_stoudemire_phx_2000s");
+  assert.ok(amare, "Amar'e Stoudemire test player exists");
+  const host = await createLobby({ name: "Amare A", mode: "parallel", capType: "hard", rerollsEnabled: true });
+  await joinLobby(host.code, { name: "Amare B" });
+  let state = await getLobbyState(host.code, host.token);
+  state = await applyLobbyAction(host.code, { token: host.token, expectedVersion: state.stateVersion, action: "start" });
+  const run = state.activeMatch?.runs.find((candidate) => candidate.playerId === state.viewerPlayerId);
+  assert.ok(run, "Amar'e viewer run exists");
+  await query(`UPDATE runs SET current_spin = $2::jsonb, updated_at = now() WHERE id = $1`, [run.id, JSON.stringify({ team: amare.team, era: amare.era })]);
+  await bumpLobbyVersion(host.code);
+
+  await browser("open", `http://127.0.0.1:${port}/lobby/${host.code}`);
+  await browser("set", "viewport", "1280", "900");
+  await evalPage(`localStorage.setItem(${JSON.stringify(`better82:${host.code}:token`)}, ${JSON.stringify(host.token)}); location.reload();`);
+  await waitForPage(`
+    const card = document.querySelector('[data-player-id="${amare.id}"]');
+    if (!card) throw new Error("Amar'e candidate card missing");
+    if (document.body.textContent.includes('Choose C / PF') || document.body.textContent.includes('court or mobile lineup strip')) {
+      throw new Error("position-choice prompt should not render");
+    }
+    if (!card.textContent.includes('Drafts at C')) throw new Error("Amar'e card should draft directly at C");
+    if (card.querySelector('.salary')) throw new Error('candidate salary badge should not render');
+    const stats = [...card.querySelectorAll('.stats-row.with-cost .stat')];
+    if (stats.length !== 6) throw new Error('candidate price should share the stat row');
+    if (!stats[0].textContent.includes(${JSON.stringify(`$${salary(amare)}`)})) throw new Error("Amar'e cost stat missing");
+    if (!stats[0].textContent.includes('Cost')) throw new Error('candidate cost label missing');
+    const costValue = stats[0].querySelector('strong')?.getBoundingClientRect();
+    const ppgValue = stats[1].querySelector('strong')?.getBoundingClientRect();
+    if (!costValue || !ppgValue) throw new Error('candidate stat values missing');
+    if (Math.abs(costValue.top - ppgValue.top) > 1) throw new Error('candidate cost is not aligned with stats');
+  `);
+  await browser("click", `[data-player-id="${amare.id}"]`);
+  await waitForPage(filledScript("C", amare.player));
+  await waitForPage(`
+    if (document.body.textContent.includes('Choose C / PF') || document.body.textContent.includes('court or mobile lineup strip')) {
+      throw new Error("position-choice prompt rendered after direct draft");
+    }
+  `);
+}
+
 async function finishViewerRun(seed: { code: string; runId: string }) {
   const lineup = completedLineup();
   const capSpent = lineup.reduce((total, pick) => total + salary(pick.player), 0);
@@ -425,7 +467,7 @@ function filledScript(position: string, player: string) {
   return `
     const slot = document.querySelector('[data-testid="court-slot-${position}"]');
     if (!slot) throw new Error('missing ${position} slot');
-    if (!slot.getAttribute('aria-label')?.includes(${JSON.stringify(player)})) throw new Error('${position} is not filled by ${player}');
+    if (!slot.getAttribute('aria-label')?.includes(${JSON.stringify(player)})) throw new Error(${JSON.stringify(`${position} is not filled by ${player}`)});
   `;
 }
 

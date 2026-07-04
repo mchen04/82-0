@@ -28,7 +28,6 @@ export function LobbyApp({ code }: { code: string }) {
   const [token, setToken] = useState<string | null>(null);
   const [name, setName] = useState("Friend");
   const [state, setState] = useState<PublicLobbyState | null>(null);
-  const [selected, setSelected] = useState<Candidate | null>(null);
   const [movingPosition, setMovingPosition] = useState<Position | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -117,30 +116,25 @@ export function LobbyApp({ code }: { code: string }) {
   const activeSpin = activeMatch?.mode === "snake" ? activeMatch.currentSpin : viewerRun?.currentSpin ?? null;
   const showDraftLayout = Boolean(token && activeMatch && state?.status !== "lobby");
   const tiannaDraftLayout = Boolean(showDraftLayout && state?.tiannaMode);
-  const canPickLineup = canAct && !busy && viewerRun?.status === "active";
   const canMoveLineup = !busy && viewerRun?.status === "active";
   const tiannaBoard = useMemo(
     () => (state?.tiannaMode && canAct ? evaluateTiannaBoard(state, viewerRun, activeMatch?.candidates ?? []) : null),
     [activeMatch?.candidates, canAct, state, viewerRun],
   );
-  async function pickFromSelected(position: Position) {
-    if (!selected) return;
-    const review = buildTiannaPickReview(selected, position, tiannaBoard);
-    const applied = await action("pick", { playerSeasonId: selected.id, position });
+  async function pickCandidate(candidate: Candidate, position: Position) {
+    const review = buildTiannaPickReview(candidate, position, tiannaBoard);
+    const applied = await action("pick", { playerSeasonId: candidate.id, position });
     if (applied) setLastTiannaPick(review);
   }
   const inlineLineup = (
     <MobileLineup
       lineup={viewerRun?.lineup ?? {}}
-      selected={selected}
+      selected={null}
       movingPosition={movingPosition}
-      canPick={canPickLineup}
+      canPick={false}
       canMove={canMoveLineup}
-      onPick={pickFromSelected}
-      onStartMove={(position) => {
-        setSelected(null);
-        setMovingPosition((current) => current === position ? null : position);
-      }}
+      onPick={() => undefined}
+      onStartMove={(position) => setMovingPosition((current) => current === position ? null : position)}
       onMove={(fromPosition, position) => action("move-pick", { fromPosition, position })}
       variant="inline"
     />
@@ -162,14 +156,12 @@ export function LobbyApp({ code }: { code: string }) {
       state={state}
       run={currentRun}
       viewerRun={viewerRun}
-      selected={selected}
-      setSelected={(candidate) => {
-        setSelected(candidate);
-        if (candidate) setMovingPosition(null);
-      }}
       canAct={canAct}
       busy={busy}
-      onPick={pickFromSelected}
+      onPick={(candidate, position) => {
+        setMovingPosition(null);
+        pickCandidate(candidate, position);
+      }}
     />
   );
 
@@ -210,7 +202,6 @@ export function LobbyApp({ code }: { code: string }) {
       const data = await response.json();
       if (!response.ok) throw new Error(data.message ?? "Action failed.");
       rememberState(data);
-      setSelected(null);
       setMovingPosition(null);
       if (actionName !== "pick") setLastTiannaPick(null);
       return true;
@@ -286,15 +277,12 @@ export function LobbyApp({ code }: { code: string }) {
               {!tiannaDraftLayout ? (
                 <Court
                   lineup={viewerRun?.lineup ?? {}}
-                  selected={selected}
+                  selected={null}
                   movingPosition={movingPosition}
-                  canPick={canPickLineup}
+                  canPick={false}
                   canMove={canMoveLineup}
-                  onPick={pickFromSelected}
-                  onStartMove={(position) => {
-                    setSelected(null);
-                    setMovingPosition((current) => current === position ? null : position);
-                  }}
+                  onPick={() => undefined}
+                  onStartMove={(position) => setMovingPosition((current) => current === position ? null : position)}
                   onMove={(fromPosition, position) => action("move-pick", { fromPosition, position })}
                 />
               ) : null}
@@ -309,15 +297,12 @@ export function LobbyApp({ code }: { code: string }) {
       {state?.activeMatch && !tiannaDraftLayout ? (
         <MobileLineup
           lineup={viewerRun?.lineup ?? {}}
-          selected={selected}
+          selected={null}
           movingPosition={movingPosition}
-          canPick={canPickLineup}
+          canPick={false}
           canMove={canMoveLineup}
-          onPick={pickFromSelected}
-          onStartMove={(position) => {
-            setSelected(null);
-            setMovingPosition((current) => current === position ? null : position);
-          }}
+          onPick={() => undefined}
+          onStartMove={(position) => setMovingPosition((current) => current === position ? null : position)}
           onMove={(fromPosition, position) => action("move-pick", { fromPosition, position })}
         />
       ) : null}
@@ -474,8 +459,6 @@ function BoardPanel({
   state,
   run,
   viewerRun,
-  selected,
-  setSelected,
   canAct,
   busy,
   onPick,
@@ -483,11 +466,9 @@ function BoardPanel({
   state: PublicLobbyState | null;
   run: PublicRun | null;
   viewerRun: PublicRun | null;
-  selected: Candidate | null;
-  setSelected: (candidate: Candidate | null) => void;
   canAct: boolean;
   busy: boolean;
-  onPick: (position: Position) => void;
+  onPick: (candidate: Candidate, position: Position) => void;
 }) {
   const [query, setQuery] = useState("");
   const [position, setPosition] = useState<Position | "All">("All");
@@ -527,7 +508,12 @@ function BoardPanel({
   if (!match) return null;
 
   const title = match.mode === "snake" && match.currentSpin ? `${match.currentSpin.team} ${match.currentSpin.era}` : viewerRun?.currentSpin ? `${viewerRun.currentSpin.team} ${viewerRun.currentSpin.era}` : "Spin, Pick, Place";
-  const subtitle = selected ? `Placing ${selected.player}` : poolCount ? `${candidates.length} of ${poolCount} players in pool` : "Each spin reveals one team and one decade";
+  const subtitle = poolCount ? `${candidates.length} of ${poolCount} players in pool` : "Each spin reveals one team and one decade";
+
+  function pickFromCard(candidate: Candidate) {
+    const position = candidate.openPositions[0];
+    if (position) onPick(candidate, position);
+  }
 
   return (
     <section className="panel board-panel">
@@ -578,9 +564,8 @@ function BoardPanel({
                 <CandidateCard
                   key={candidate.id}
                   candidate={candidate}
-                  active={selected?.id === candidate.id}
                   disabled={busy || !canAct || !candidate.assignable}
-                  onSelect={() => setSelected(selected?.id === candidate.id ? null : candidate)}
+                  onSelect={() => pickFromCard(candidate)}
                 />
               ))}
             </div>
@@ -592,16 +577,6 @@ function BoardPanel({
               </div>
             </div>
           )}
-          {selected ? (
-            <div className="notice">
-              Choose {selected.openPositions.join(" / ")} on the court or mobile lineup strip to draft {selected.player}.
-              {selected.openPositions.map((slot) => (
-                <button className="btn primary" type="button" key={slot} disabled={busy || !canAct} onClick={() => onPick(slot)}>
-                  {slot}
-                </button>
-              ))}
-            </div>
-          ) : null}
         </>
       ) : ownFinal ? (
         <div className="empty-state">
@@ -614,7 +589,7 @@ function BoardPanel({
         <div className="empty-state">
           <div>
             <h2>{run?.status === "lost" ? "Cap busted." : "No board yet."}</h2>
-            <p>{run?.lostReason ?? "Spin to reveal one team and one decade. Pick a player from that pool, then place him into one open eligible position."}</p>
+            <p>{run?.lostReason ?? "Spin to reveal one team and one decade, then draft a player from that pool."}</p>
           </div>
         </div>
       )}
@@ -622,29 +597,29 @@ function BoardPanel({
   );
 }
 
-function CandidateCard({ candidate, active, disabled, onSelect }: { candidate: Candidate; active: boolean; disabled: boolean; onSelect: () => void }) {
+function CandidateCard({ candidate, disabled, onSelect }: { candidate: Candidate; disabled: boolean; onSelect: () => void }) {
   return (
-    <button className={`candidate-button ${active ? "active" : ""}`} type="button" disabled={disabled} onClick={onSelect} data-testid="player-card" data-player-id={candidate.id}>
+    <button className="candidate-button" type="button" disabled={disabled} onClick={onSelect} data-testid="player-card" data-player-id={candidate.id}>
       <div>
         <div className="candidate-top">
           <p className="candidate-name">{candidate.player}</p>
-          <span className={`salary ${candidate.affordable ? "" : "bad"}`}>${candidate.cost}</span>
         </div>
         <p className="eyebrow">
           {candidate.positions.join(" / ")} · {candidate.team} · {candidate.era}
         </p>
         <p className="small-copy">
-          {candidate.assignable ? `Open: ${candidate.openPositions.join(" / ")}` : candidate.affordable ? "No open eligible slot" : "Too expensive for the hard-cap reserve"}
+          {candidate.assignable ? `Drafts at ${candidate.openPositions[0]}` : candidate.affordable ? "No open eligible slot" : "Too expensive for the hard-cap reserve"}
         </p>
       </div>
-      <Stats player={candidate} />
+      <Stats player={candidate} cost={candidate.cost} affordable={candidate.affordable} />
     </button>
   );
 }
 
-function Stats({ player }: { player: Candidate | LineupSlot }) {
+function Stats({ player, cost, affordable = true }: { player: Candidate | LineupSlot; cost?: number; affordable?: boolean }) {
   return (
-    <div className="stats-row">
+    <div className={`stats-row ${typeof cost === "number" ? "with-cost" : ""}`}>
+      {typeof cost === "number" ? <Stat label="Cost" value={`$${cost}`} tone={affordable ? "good" : "bad"} /> : null}
       <Stat label="PPG" value={player.perGame.ppg} />
       <Stat label="RPG" value={player.perGame.rpg} />
       <Stat label="APG" value={player.perGame.apg} />
@@ -654,10 +629,10 @@ function Stats({ player }: { player: Candidate | LineupSlot }) {
   );
 }
 
-function Stat({ label, value }: { label: string; value: number }) {
+function Stat({ label, value, tone }: { label: string; value: number | string; tone?: "good" | "bad" }) {
   return (
-    <div className="stat">
-      <strong>{formatStat(value)}</strong>
+    <div className={`stat ${tone ? `stat-${tone}` : ""}`}>
+      <strong>{typeof value === "number" ? formatStat(value) : value}</strong>
       <span>{label}</span>
     </div>
   );
